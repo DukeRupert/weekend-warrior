@@ -7,27 +7,45 @@ import (
 	"github.com/rickb777/date"
 )
 
+type (
+	Week [7]int32
+	Days []time.Weekday
+)
+
 type Schedule struct {
-	Name  string
-	RDOs  RDO
-	Start date.Date
+	name string
+	bid  Bid
+}
+
+type Bid struct {
+	count  int
+	days   Days
+	anchor date.Date
 }
 
 type RDO struct {
-	count int
-	days  []time.Weekday
-}
-
-type Week [7]int32
-
-type Set struct {
 	Days      []date.Date
 	Protected bool
 	Available bool
 }
 
-func contains(s []time.Weekday, e time.Weekday) bool {
-	for _, a := range s {
+type RDOs []RDO
+
+func NewSchedule() (*Schedule, error) {
+	s := &Schedule{
+		name: "standard",
+		bid: Bid{
+			count:  2,
+			days:   Days{0, 6},
+			anchor: date.Today(),
+		},
+	}
+
+	return s, nil
+}
+
+func (s *Schedule) contains(e time.Weekday) bool {
+	for _, a := range s.bid.days {
 		if a == e {
 			return true
 		}
@@ -35,52 +53,63 @@ func contains(s []time.Weekday, e time.Weekday) bool {
 	return false
 }
 
-func print_rdos(s date.Date, rdos []time.Weekday, r int) {
-	set := Set{}
+func (s *Schedule) generate_rdos(r date.PeriodOfDays) RDOs {
+	schedule := []RDO{}
+	set := RDO{Days: []date.Date{}, Protected: false, Available: false}
 	for i := range r {
-		d := s.Add(date.PeriodOfDays(i))
-		status := contains(rdos, d.Weekday())
+		d := s.bid.anchor.Add(date.PeriodOfDays(i))
+		status := s.contains(d.Weekday())
 		if status {
 			set.Days = append(set.Days, d)
 		}
-	}
-	fmt.Println("Rdo set:")
-	for _, v := range set.Days {
-		fmt.Printf("%s - %s \n", v, v.Weekday())
-	}
-	return
-}
-
-func generate_set(s date.Date, rdos []time.Weekday, r int) Set {
-	set := Set{}
-	for i := range r {
-		d := s.Add(date.PeriodOfDays(i))
-		status := contains(rdos, d.Weekday())
-		if status {
-			set.Days = append(set.Days, d)
+		if len(set.Days) == 2 {
+			schedule = append(schedule, set)
+			set = RDO{}
 		}
 	}
-	return set
+	return schedule
 }
 
-func generate_schedule(s Schedule, t date.Date) {
-	count := t.Sub(s.Start)
+// Given a schedule and target date return all RDO sets
+func (s *Schedule) generate_schedule(t date.Date) []RDO {
+	// Calculate the difference in days between start date and target date
+	count := t.Sub(s.bid.anchor)
 	fmt.Println("Number of days between start & target:", count)
-	weeks := count / 7
-	remainder := count % 7
-	fmt.Printf("%d weeks and %d days", weeks, remainder)
+
+	// Generate rdo sets
+	schedule := s.generate_rdos(count)
+	schedule = protect_sets(schedule)
+	return schedule
+}
+
+func protect_sets(s []RDO) []RDO {
+	for i, v := range s {
+		if i%3 == 0 {
+			v.Protected = true
+		}
+	}
+	return s
+}
+
+func print_schedule(s []RDO) {
+	for i, v := range s {
+		if i%3 == 0 {
+			v.Protected = true
+		}
+		if v.Protected {
+			fmt.Println("This set of Rdos is protected -", v.Protected)
+			for _, val := range v.Days {
+				fmt.Printf("%s \n", val)
+			}
+		}
+	}
 }
 
 func main() {
 	fmt.Println("Hello, let's start solving problems!")
-	standard := Schedule{
-		Name: "standard",
-		RDOs: RDO{
-			count: 2,
-			days:  []time.Weekday{0, 6},
-		},
-		Start: date.Today(),
-	}
-	fmt.Printf("Controller A is on a %s schedule of %d rdos, %s and %s. \n", standard.Name, standard.RDOs.count, standard.RDOs.days[0], standard.RDOs.days[1])
-	generate_schedule(standard, standard.Start.Add(31))
+	// Create schedules for debug
+	standard, _ := NewSchedule()
+	fmt.Printf("Controller A is on a %s schedule of %d rdos. \n", standard.name, standard.bid.count)
+	schedule := standard.generate_schedule(standard.bid.anchor.Add(14))
+	print_schedule(schedule)
 }
