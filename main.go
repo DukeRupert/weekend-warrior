@@ -2,114 +2,49 @@ package main
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/rickb777/date"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html/v2"
 )
-
-type (
-	Week [7]int32
-	Days []time.Weekday
-)
-
-type Schedule struct {
-	name string
-	bid  Bid
-}
-
-type Bid struct {
-	count  int
-	days   Days
-	anchor date.Date
-}
-
-type RDO struct {
-	Days      []date.Date
-	Protected bool
-	Available bool
-}
-
-type RDOs []RDO
-
-func NewSchedule() (*Schedule, error) {
-	s := &Schedule{
-		name: "standard",
-		bid: Bid{
-			count:  2,
-			days:   Days{0, 6},
-			anchor: date.Today(),
-		},
-	}
-
-	return s, nil
-}
-
-func (s *Schedule) contains(e time.Weekday) bool {
-	for _, a := range s.bid.days {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Schedule) generate_rdos(r date.PeriodOfDays) RDOs {
-	schedule := []RDO{}
-	set := RDO{Days: []date.Date{}, Protected: false, Available: false}
-	for i := range r {
-		d := s.bid.anchor.Add(date.PeriodOfDays(i))
-		status := s.contains(d.Weekday())
-		if status {
-			set.Days = append(set.Days, d)
-		}
-		if len(set.Days) == 2 {
-			schedule = append(schedule, set)
-			set = RDO{}
-		}
-	}
-	return schedule
-}
-
-// Given a schedule and target date return all RDO sets
-func (s *Schedule) generate_schedule(t date.Date) []RDO {
-	// Calculate the difference in days between start date and target date
-	count := t.Sub(s.bid.anchor)
-	fmt.Println("Number of days between start & target:", count)
-
-	// Generate rdo sets
-	schedule := s.generate_rdos(count)
-	schedule = protect_sets(schedule)
-	return schedule
-}
-
-func protect_sets(s []RDO) []RDO {
-	for i, v := range s {
-		if i%3 == 0 {
-			v.Protected = true
-		}
-	}
-	return s
-}
-
-func print_schedule(s []RDO) {
-	for i, v := range s {
-		if i%3 == 0 {
-			v.Protected = true
-		}
-		if v.Protected {
-			fmt.Println("This set of Rdos is protected -", v.Protected)
-			for _, val := range v.Days {
-				fmt.Printf("%s \n", val)
-			}
-		}
-	}
-}
 
 func main() {
 	fmt.Println("Hello, let's start solving problems!")
-	// Create schedules for debug
-	standard, _ := NewSchedule()
-	fmt.Printf("Controller A is on a %s schedule of %d rdos. \n", standard.name, standard.bid.count)
-	schedule := standard.generate_schedule(standard.bid.anchor.Add(14))
-	print_schedule(schedule)
+
+	// Create a new engine
+	engine := html.New("./views", ".html")
+
+	app := fiber.New(fiber.Config{
+		// Pass in Views Template Engine
+		Views: engine,
+
+		// Default global path to search for Views
+		ViewsLayout: "layouts/main",
+
+		// Enables/Disables access to `ctx.Locals()` entries in rendered view
+		// (defaults to false)
+		PassLocalsToViews: false,
+	})
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		// Render index
+		return c.Render("index", fiber.Map{
+			"Title": "Hello, World!",
+		})
+	})
+
+	app.Get("/layout", func(c *fiber.Ctx) error {
+		// Render index within layouts/main
+		return c.Render("index", fiber.Map{
+			"Title": "Hello, World!",
+		}, "layouts/main")
+	})
+
+	app.Get("/layouts-nested", func(c *fiber.Ctx) error {
+		// Render index within layouts/nested/main within layouts/nested/base
+		return c.Render("index", fiber.Map{
+			"Title": "Hello, World!",
+		}, "layouts/nested/main", "layouts/nested/base")
+	})
+
+	app.Listen(":3000")
 }
