@@ -1,6 +1,6 @@
 // devcontainer.json
 {
-    "name": "Codespaces Go Template Repository",
+    "name": "weekend-warrior",
     "extensions": [
         "coenraads.bracket-pair-colorizer-2",
         "eamodio.gitlens",
