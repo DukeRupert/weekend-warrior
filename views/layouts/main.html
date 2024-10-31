@@ -3,17 +3,17 @@
   <head>
     <title>Main</title>
    <style>
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      background-color: #f5f5f5;
-    }
-    
+        body {
+        font-family: system-ui, -apple-system, sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background-color: #f5f5f5;
+        }
+        
         .calendar {
             font-family: system-ui, -apple-system, sans-serif;
             max-width: 800px;
@@ -122,41 +122,54 @@
             font-weight: bold;
         }
 
-        .pair-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-top: 1.75rem;
-        }
+        .pair-indicators {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 2px;
+}
 
-        .pair-indicator.protected {
-            border: 2px solid #333;
-            width: 6px;
-            height: 6px;
-        }
+.pair-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
 
-        .legend {
-            margin-top: 1rem;
-            padding: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-            color: #666;
-        }
+.pair-indicator.protected {
+    border: 1px solid rgba(0, 0, 0, 0.856);
+}
 
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-        }
+.legend {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 1rem;
+}
 
-        .legend-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.day {
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px;
+}
+
+.day-number {
+    margin-bottom: 2px;
+}
 
         .screen-reader-text {
             position: absolute;
@@ -169,7 +182,7 @@
             white-space: nowrap;
             border-width: 0;
         }
-    </style> 
+    </style>
   </head>
   <body>
     {{template "partials/header" .}}
