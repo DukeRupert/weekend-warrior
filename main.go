@@ -2,132 +2,105 @@ package main
 
 import (
 	"fmt"
-	"time"
+	"context"
+	"log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
-	"github.com/rickb777/date"
+	"github.com/jackc/pgx/v5"
+	"github.com/dukerupert/weekend-warrior/config"
+	"github.com/dukerupert/weekend-warrior/services"
+	"github.com/dukerupert/weekend-warrior/handlers"
 )
 
-type (
-	Week [7]int32
-	Days []time.Weekday
-)
-
-type Schedule struct {
-	Name string
-	Bid  Bid
+// Config holds all configuration for our application
+type Config struct {
+    DatabaseURL string
+    Port        string
 }
 
-type Bid struct {
-	Count  int
-	Days   Days
-	Anchor date.Date
+// App holds all dependencies for our application
+type App struct {
+    DB     *pgx.Conn
+    Fiber  *fiber.App
+    Config *config.Config
 }
 
-type RDO struct {
-	Days      []date.Date
-	Protected bool
-	Available bool
+func NewApp(cfg *config.Config) (*App, error) {
+    // Connect to database using config
+    conn, err := pgx.Connect(context.Background(), cfg.GetDatabaseURL())
+    if err != nil {
+        return nil, fmt.Errorf("unable to connect to database: %v", err)
+    }
+
+    // Create Fiber instance with config
+    fiberApp := fiber.New(fiber.Config{
+        ReadTimeout:       cfg.Server.ReadTimeout,
+        WriteTimeout:      cfg.Server.WriteTimeout,
+        Views:            html.New("./views", ".html"),
+        ViewsLayout:      "layouts/main",
+        PassLocalsToViews: false,
+    })
+
+    return &App{
+        DB:     conn,
+        Fiber:  fiberApp,
+        Config: cfg,
+    }, nil
 }
 
-type RDOs []RDO
+// Setup configures our routes and middleware
+func (a *App) Setup() {
+    // Store DB connection in context for handlers to use
+    a.Fiber.Use(func(c *fiber.Ctx) error {
+        c.Locals("db", a.DB)
+        return c.Next()
+    })
 
-func NewSchedule() (*Schedule, error) {
-	s := &Schedule{
-		Name: "standard",
-		Bid: Bid{
-			Count:  2,
-			Days:   Days{0, 6},
-			Anchor: date.Today(),
-		},
-	}
+	// Create calendar service
+    calendarService := calendar.NewService(a.DB)
+    
+    // Create calendar handler
+    calendarHandler := handlers.NewCalendarHandler(calendarService)
 
-	return s, nil
+    // Setup routes
+    a.Fiber.Get("/", calendarHandler.CalendarHandler)
 }
 
-func (s *Schedule) contains(e time.Weekday) bool {
-	for _, a := range s.Bid.Days {
-		if a == e {
-			return true
-		}
-	}
-	return false
+// Start begins listening for requests
+func (a *App) Start() error {
+    return a.Fiber.Listen(":" + a.Config.Server.Port)
 }
 
-func (s *Schedule) generate_rdos(r date.PeriodOfDays) RDOs {
-	schedule := []RDO{}
-	set := RDO{Days: []date.Date{}, Protected: false, Available: false}
-	for i := range r {
-		d := s.Bid.Anchor.Add(date.PeriodOfDays(i))
-		status := s.contains(d.Weekday())
-		if status {
-			set.Days = append(set.Days, d)
-		}
-		if len(set.Days) == 2 {
-			schedule = append(schedule, set)
-			set = RDO{}
-		}
-	}
-	return schedule
-}
-
-// Given a schedule and target date return all RDO sets
-func (s *Schedule) Generate_schedule(t date.Date) []RDO {
-	// Calculate the difference in days between start date and target date
-	count := t.Sub(s.Bid.Anchor)
-	fmt.Println("Number of days between start & target:", count)
-
-	// Generate rdo sets
-	schedule := s.generate_rdos(count)
-	schedule = Protect_sets(schedule)
-	return schedule
-}
-
-func Protect_sets(s []RDO) []RDO {
-	for i, v := range s {
-		if i%3 == 0 {
-			v.Protected = true
-		}
-	}
-	return s
-}
-
-func Print_schedule(s []RDO) {
-	for i, v := range s {
-		if i%3 == 0 {
-			v.Protected = true
-		}
-		if v.Protected {
-			fmt.Println("This set of Rdos is protected -", v.Protected)
-			for _, val := range v.Days {
-				fmt.Printf("%s \n", val)
-			}
-		}
-	}
+// Cleanup handles graceful shutdown
+func (a *App) Cleanup() {
+    if err := a.DB.Close(context.Background()); err != nil {
+        log.Printf("Error closing DB connection: %v", err)
+    }
 }
 
 func main() {
-	fmt.Println("Hello, let's start solving problems!")
-
-	// Create a new engine
-	engine := html.New("./views", ".html")
-
-	app := fiber.New(fiber.Config{
-		// Pass in Views Template Engine
-		Views: engine,
-
-		// Default global path to search for Views
-		ViewsLayout: "layouts/main",
-
-		// Enables/Disables access to `ctx.Locals()` entries in rendered view
-		// (defaults to false)
-		PassLocalsToViews: false,
-	})
-
-	err := app.Get("/", CalendarHandler)
+	// Load configuration
+    cfg, err := config.LoadConfig(".env")
     if err != nil {
-        fmt.Printf("Error: %s", err)
+        log.Fatalf("Failed to load configuration: %v", err)
     }
 
-	app.Listen(":3000")
+    // Create new app instance with configuration
+    app, err := NewApp(cfg)
+    if err != nil {
+        log.Fatalf("Failed to create app: %v", err)
+    }
+    defer app.Cleanup()
+
+    // Setup routes and middleware
+    app.Setup()
+
+    // Start the server
+    log.Printf("Starting server on port %s in %s mode", 
+        cfg.Server.Port, 
+        cfg.Server.Environment,
+    )
+    if err := app.Start(); err != nil {
+        log.Fatalf("Error starting server: %v", err)
+    }
 }

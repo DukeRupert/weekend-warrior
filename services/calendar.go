@@ -1,10 +1,23 @@
-package main
+package calendar
 
 import (
     "fmt"
-	"time"
     "html/template"
+    "time"
+    "github.com/jackc/pgx/v5"
 )
+
+// Service handles all calendar-related business logic
+type Service struct {
+    db *pgx.Conn
+}
+
+// NewService creates a new calendar service
+func NewService(db *pgx.Conn) *Service {
+    return &Service{
+        db: db,
+    }
+}
 
 // CalendarDay represents a single day in the calendar
 type CalendarDay struct {
@@ -24,8 +37,15 @@ type Calendar struct {
     Initials  string    // Two-letter initials for the legend
 }
 
+// WeekdayPair represents a pair of weekdays
+type WeekdayPair struct {
+    First     time.Time
+    Second    time.Time
+    Protected bool
+}
+
 // generateColor creates a pleasing HSL color based on an index
-func generateColor(index int) template.CSS {
+func (s *Service) generateColor(index int) template.CSS {
     // Use golden ratio for even color distribution
     goldenRatio := 0.618033988749895
     hue := float64(index) * goldenRatio
@@ -38,15 +58,8 @@ func generateColor(index int) template.CSS {
     return template.CSS(fmt.Sprintf("hsl(%.0f, 65%%, 60%%)", hue*360))
 }
 
-// WeekdayPair represents a pair of weekdays
-type WeekdayPair struct {
-    First     time.Time
-    Second    time.Time
-    Protected bool
-}
-
 // GenerateWeekdayPairs generates pairs of weekdays for a year from the anchor date
-func GenerateWeekdayPairs(firstWeekday, secondWeekday time.Weekday, anchorDate time.Time) []WeekdayPair {
+func (s *Service) GenerateWeekdayPairs(firstWeekday, secondWeekday time.Weekday, anchorDate time.Time) []WeekdayPair {
     var pairs []WeekdayPair
     
     // Normalize time to midnight to ensure consistent date handling
@@ -95,8 +108,8 @@ func GenerateWeekdayPairs(firstWeekday, secondWeekday time.Weekday, anchorDate t
     return pairs
 }
 
-// GetMonthName converts month number to name
-func GetMonthName(month int) string {
+// getMonthName converts month number to name
+func (s *Service) getMonthName(month int) string {
     months := []string{
         "January", "February", "March", "April",
         "May", "June", "July", "August",
@@ -112,7 +125,7 @@ func GetMonthName(month int) string {
 // Returns:
 //   - year: The current year (e.g., 2024)
 //   - month: The current month (1-12)
-func GetCurrentYearMonth() (year int, month int) {
+func (s *Service) GetCurrentYearMonth() (year int, month int) {
     now := time.Now()
     return now.Year(), int(now.Month())
 }
@@ -122,7 +135,7 @@ func GetCurrentYearMonth() (year int, month int) {
 // month: The month (1-12)
 // Returns: The number of days in the specified month
 // Example: DaysInMonth(2024, 2) returns 29 (leap year February)
-func DaysInMonth(year int, month int) int {
+func (s *Service) DaysInMonth(year int, month int) int {
     // Validate month input
     if month < 1 || month > 12 {
         return 0
@@ -145,7 +158,7 @@ func DaysInMonth(year int, month int) int {
 // Returns:
 //   - weekday: Integer from 0 (Sunday) to 6 (Saturday)
 //   - If month is invalid, returns -1
-func FirstDayOfMonth(year int, month int) int {
+func (s *Service) FirstDayOfMonth(year int, month int) int {
     // Validate month input
     if month < 1 || month > 12 {
         return -1
@@ -159,21 +172,21 @@ func FirstDayOfMonth(year int, month int) int {
 }
 
 // GenerateCalendar creates a calendar structure for a specific pair set
-func GenerateCalendar(year, month int, pairs []WeekdayPair, initials string, colorIndex int) Calendar {
+func (s *Service) GenerateCalendar(year, month int, pairs []WeekdayPair, initials string, colorIndex int) Calendar {
     // Get the current date for comparing with today
-    currentYear, currentMonth := GetCurrentYearMonth()
+    currentYear, currentMonth := s.GetCurrentYearMonth()
     currentDay := time.Now().Day()
 
-    firstDayWeekday := FirstDayOfMonth(year, month)
-    totalDays := DaysInMonth(year, month)
+    firstDayWeekday := s.FirstDayOfMonth(year, month)
+    totalDays := s.DaysInMonth(year, month)
 
     // Initialize the calendar
     cal := Calendar{
         Year:      year,
         Month:     month,
-        MonthName: GetMonthName(month),
+        MonthName: s.getMonthName(month),
         Days:      make([][]CalendarDay, 6),
-        Color:     generateColor(colorIndex),
+        Color:     s.generateColor(colorIndex),
         Initials:  initials,
     }
 
