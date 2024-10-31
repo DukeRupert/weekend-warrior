@@ -7,9 +7,8 @@ import (
 )
 // HTTP handler would need to be updated to include the pairs:
 func CalendarHandler(c *fiber.Ctx) error {
-
 	// Handle url query values
-    year, month := GetCurrentYearMonth() // Default to current date
+    year, month := GetCurrentYearMonth()
     if yearStr := c.Query("year"); yearStr != "" {
         if y, err := strconv.Atoi(yearStr); err == nil {
             year = y
@@ -22,9 +21,10 @@ func CalendarHandler(c *fiber.Ctx) error {
         }
     }
 
-    // Generate weekday pairs (example using Monday and Wednesday)
+    // Generate the calendar for a specific pair set
     anchorDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
     pairs := GenerateWeekdayPairs(time.Monday, time.Wednesday, anchorDate)
-    cal := GenerateCalendar(year, month, pairs)
+    cal := GenerateCalendar(year, month, pairs, "JD", 0) // JD = initials, 0 = color index
+
     return c.Render("calendar", cal)
 }

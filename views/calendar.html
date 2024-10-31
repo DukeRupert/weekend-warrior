@@ -1,21 +1,19 @@
 
     <div class="calendar">
-        <div class="header">
-           <div class="nav-controls">
-                <select id="yearSelect" class="year-select" onchange="changeYear()">
-                    {{range .YearOptions}}
-                        <option value="{{.}}" {{if eq . $.Year}}selected{{end}}>
-                            {{.}}
-                        </option>
-                    {{end}}
-                </select>
-            </div> </div>
-        <div class="header">
-            <button class="nav-button" onclick="navigate(-1)"><</button>
-            <div class="nav-controls">
-                <div class="month-year">{{.MonthName}}</div>
-            </div>
-            <button class="nav-button" onclick="navigate(1)">></button>
+        <div class="calendar-nav">
+            <button type="button" onclick="navigate(-1)" class="nav-button">
+                <span class="screen-reader-text">Previous month</span>
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+                </svg>
+            </button>
+            <div class="month-label">{{.MonthName}} {{.Year}}</div>
+            <button type="button" onclick="navigate(1)" class="nav-button">
+                <span class="screen-reader-text">Next month</span>
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                </svg>
+            </button>
         </div>
         <div class="weekdays">
             <div>Sun</div>
@@ -32,41 +30,41 @@
                     {{if eq .Day 0}}
                         <div class="day empty"></div>
                     {{else}}
-                        <div class="day{{if .IsToday}} today{{end}}{{if .IsFirstDay}} first-day{{end}}{{if .IsSecondDay}} second-day{{end}}{{if .IsProtected}} protected{{end}}">
-                            {{.Day}}
+                        <div class="day{{if .IsToday}} today{{end}}">
+                            <div class="day-number">{{.Day}}</div>
+                            {{if .HasPair}}
+                                <div class="pair-indicator{{if .Protected}} protected{{end}}" 
+                                     style="background-color: {{$.Color}}">
+                                </div>
+                            {{end}}
                         </div>
                     {{end}}
                 {{end}}
             {{end}}
         </div>
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-dot" style="background-color: {{.Color}}"></div>
+                <span>{{.Initials}}</span>
+            </div>
+            <!-- Could add a protected example here if needed -->
+        </div>
     </div>
-
-<script>
-    function navigate(offset) {
-        const yearSelect = document.getElementById('yearSelect');
-        const urlParams = new URLSearchParams(window.location.search);
-        let year = parseInt(yearSelect.value);
-        let month = parseInt(urlParams.get('month')) || {{.Month}};
-        
-        month += offset;
-        if (month > 12) {
-            month = 1;
-            year++;
-            yearSelect.value = year;
-        } else if (month < 1) {
-            month = 12;
-            year--;
-            yearSelect.value = year;
+    <script>
+        function navigate(offset) {
+            const urlParams = new URLSearchParams(window.location.search);
+            let year = parseInt(urlParams.get('year')) || {{.Year}};
+            let month = parseInt(urlParams.get('month')) || {{.Month}};
+            
+            month += offset;
+            if (month > 12) {
+                month = 1;
+                year++;
+            } else if (month < 1) {
+                month = 12;
+                year--;
+            }
+            
+            window.location.href = '?year=' + year + '&month=' + month;
         }
-        
-        window.location.href = '?year=' + year + '&month=' + month;
-    }
-
-    function changeYear() {
-        const year = document.getElementById('yearSelect').value;
-        const urlParams = new URLSearchParams(window.location.search);
-        const month = urlParams.get('month') || {{.Month}};
-        
-        window.location.href = '?year=' + year + '&month=' + month;
-    }
-</script>
+    </script>

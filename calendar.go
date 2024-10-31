@@ -1,25 +1,41 @@
 package main
 
 import (
+    "fmt"
 	"time"
+    "html/template"
 )
 
 // CalendarDay represents a single day in the calendar
 type CalendarDay struct {
-    Day     int  // 1-31, or 0 for empty cells
-    IsToday bool // true if this is today's date
-	IsFirstDay  bool    // First day of a pair
-    IsSecondDay bool    // Second day of a pair
-    IsProtected bool    // Protected pair
+    Day       int
+    IsToday   bool
+    HasPair   bool
+    Protected bool
 }
 
 // Calendar represents a complete month calendar structure
 type Calendar struct {
-    Year        int
-    Month       int
-    Days        [][]CalendarDay
-    MonthName   string
-    YearOptions []int  // Added field for year dropdown
+    Year      int
+    Month     int
+    Days      [][]CalendarDay
+    MonthName string
+    Color     template.CSS    // HSL color for this calendar's pairs
+    Initials  string    // Two-letter initials for the legend
+}
+
+// generateColor creates a pleasing HSL color based on an index
+func generateColor(index int) template.CSS {
+    // Use golden ratio for even color distribution
+    goldenRatio := 0.618033988749895
+    hue := float64(index) * goldenRatio
+    
+    // Keep the hue within [0,1)
+    hue = hue - float64(int(hue))
+    
+    // Convert to degrees and create HSL color
+    // Use 65% saturation and 60% lightness for pleasant, visible colors
+    return template.CSS(fmt.Sprintf("hsl(%.0f, 65%%, 60%%)", hue*360))
 }
 
 // WeekdayPair represents a pair of weekdays
@@ -142,7 +158,8 @@ func FirstDayOfMonth(year int, month int) int {
     return int(firstDay.Weekday())
 }
 
-func GenerateCalendar(year, month int, pairs []WeekdayPair) Calendar {
+// GenerateCalendar creates a calendar structure for a specific pair set
+func GenerateCalendar(year, month int, pairs []WeekdayPair, initials string, colorIndex int) Calendar {
     // Get the current date for comparing with today
     currentYear, currentMonth := GetCurrentYearMonth()
     currentDay := time.Now().Day()
@@ -156,56 +173,41 @@ func GenerateCalendar(year, month int, pairs []WeekdayPair) Calendar {
         Month:     month,
         MonthName: GetMonthName(month),
         Days:      make([][]CalendarDay, 6),
+        Color:     generateColor(colorIndex),
+        Initials:  initials,
     }
 
-    // Initialize each week
+    // Create a map of dates to their pair status
+    pairMap := make(map[time.Time]bool)
+    protectedMap := make(map[time.Time]bool)
+    
+    for _, pair := range pairs {
+        pairMap[pair.First] = true
+        pairMap[pair.Second] = true
+        if pair.Protected {
+            protectedMap[pair.First] = true
+            protectedMap[pair.Second] = true
+        }
+    }
+
+    // Initialize and fill the calendar
+    day := 1
     for i := range cal.Days {
         cal.Days[i] = make([]CalendarDay, 7)
-    }
-
-    // Create a map of dates to their pair status for quick lookup
-    pairMap := make(map[time.Time]struct{
-        isFirst    bool
-        isSecond   bool
-        isProtected bool
-    })
-
-    // Populate the pair map
-    for _, pair := range pairs {
-        pairMap[pair.First] = struct{
-            isFirst    bool
-            isSecond   bool
-            isProtected bool
-        }{isFirst: true, isProtected: pair.Protected}
-        
-        pairMap[pair.Second] = struct{
-            isFirst    bool
-            isSecond   bool
-            isProtected bool
-        }{isSecond: true, isProtected: pair.Protected}
-    }
-
-    // Fill in the calendar
-    day := 1
-    for week := 0; week < 6; week++ {
-        for weekday := 0; weekday < 7; weekday++ {
-            if week == 0 && weekday < firstDayWeekday {
-                cal.Days[week][weekday] = CalendarDay{Day: 0}
-            } else if day <= totalDays {
-                currentDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
-                pairStatus, hasPair := pairMap[currentDate]
-                
-                cal.Days[week][weekday] = CalendarDay{
-                    Day:         day,
-                    IsToday:     year == currentYear && month == currentMonth && day == currentDay,
-                    IsFirstDay:  hasPair && pairStatus.isFirst,
-                    IsSecondDay: hasPair && pairStatus.isSecond,
-                    IsProtected: hasPair && pairStatus.isProtected,
-                }
-                day++
-            } else {
-                cal.Days[week][weekday] = CalendarDay{Day: 0}
+        for j := range cal.Days[i] {
+            if i == 0 && j < firstDayWeekday || day > totalDays {
+                cal.Days[i][j] = CalendarDay{Day: 0}
+                continue
             }
+
+            currentDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+            cal.Days[i][j] = CalendarDay{
+                Day:       day,
+                IsToday:  year == currentYear && month == currentMonth && day == currentDay,
+                HasPair:  pairMap[currentDate],
+                Protected: protectedMap[currentDate],
+            }
+            day++
         }
     }
 

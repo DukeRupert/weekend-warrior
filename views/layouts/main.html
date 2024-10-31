@@ -75,6 +75,7 @@
             flex: 1 1 auto;
             font-size: 0.875rem;
             font-weight: 600;
+            text-align: center;
         }
 
         .calendar {
@@ -121,16 +122,40 @@
             font-weight: bold;
         }
 
-        .first-day {
-            background-color: #90EE90;  /* Light green */
+        .pair-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-top: 1.75rem;
         }
 
-        .second-day {
-            background-color: #98FB98;  /* Pale green */
+        .pair-indicator.protected {
+            border: 2px solid #333;
+            width: 6px;
+            height: 6px;
         }
 
-        .protected {
-            border: 2px solid #FF6B6B;  /* Coral red border */
+        .legend {
+            margin-top: 1rem;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: #666;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
         }
 
         .screen-reader-text {
