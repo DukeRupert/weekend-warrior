@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS controllers(
     initials CHAR(2) NOT NULL,
     email TEXT UNIQUE NOT NULL,
     facility_id INTEGER NOT NULL REFERENCES facilities(id),
-    role_id INTEGER NOT NULL REFERENCES roles(id),
     UNIQUE(facility_id, initials)
 );
 -- +goose StatementEnd
