@@ -20,6 +20,17 @@ This command:
 - [goose](https://github.com/pressly/goose) installed on your system
 - Database connection details set in your environment variables
 
+### Important Note for Supabase
+When running goose migrations against a Supabase database, you must use session mode (port 5432) rather than transaction mode (port 6543). Ensure your database connection string uses port 5432 in your .env file:
+
+```bash
+# Correct - Session mode
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@localhost:5432/postgres
+
+# Wrong - Transaction mode
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@localhost:6543/postgres
+```
+
 ### Note
 Make sure your `.env` file contains all necessary database connection details required by your migration configuration.
 
