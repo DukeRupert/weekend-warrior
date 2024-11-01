@@ -4,16 +4,16 @@ import (
     "fmt"
     "html/template"
     "time"
-    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Service handles all calendar-related business logic
 type Service struct {
-    db *pgx.Conn
+    db *pgxpool.Pool
 }
 
 // NewService creates a new calendar service
-func NewService(db *pgx.Conn) *Service {
+func NewService(db *pgxpool.Pool) *Service {
     return &Service{
         db: db,
     }

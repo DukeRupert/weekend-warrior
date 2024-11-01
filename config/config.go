@@ -13,6 +13,7 @@ import (
 type Config struct {
     Server   ServerConfig
     Database DatabaseConfig
+    TestDatabase TestDatabaseConfig
     Redis    RedisConfig
 }
 
@@ -24,6 +25,15 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
+    Host     string
+    Port     string
+    User     string
+    Password string
+    Name     string
+    SSLMode  string
+}
+
+type TestDatabaseConfig struct {
     Host     string
     Port     string
     User     string
@@ -69,6 +79,16 @@ func LoadConfig(envFile string) (*Config, error) {
         SSLMode:  getEnv("DB_SSL_MODE", "disable"),
     }
 
+    // Load database configuration
+    config.TestDatabase = TestDatabaseConfig{
+        Host:     getEnv("TEST_DB_HOST", "localhost"),
+        Port:     getEnv("TEST_DB_PORT", "5432"),
+        User:     getEnv("TEST_DB_USER", "postgres"),
+        Password: getEnv("TEST_DB_PASSWORD", ""),
+        Name:     getEnv("TEST_DB_NAME", ""),
+        SSLMode:  getEnv("TEST_DB_SSL_MODE", "disable"),
+    }
+
     // Load Redis configuration
     config.Redis = RedisConfig{
         Host:     getEnv("REDIS_HOST", "localhost"),
@@ -107,6 +127,20 @@ func (c *Config) GetDatabaseURL() string {
         c.Database.SSLMode,
     )
 }
+
+// GetTestDatabaseURL returns the formatted database connection string
+func (c *Config) GetTestDatabaseURL() string {
+    return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+        c.TestDatabase.User,
+        c.TestDatabase.Password,
+        c.TestDatabase.Host,
+        c.TestDatabase.Port,
+        c.TestDatabase.Name,
+        c.TestDatabase.SSLMode,
+    )
+}
+
+
 
 // Helper functions for getting environment variables with defaults
 func getEnv(key, defaultValue string) string {

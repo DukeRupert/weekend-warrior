@@ -4,7 +4,7 @@ import (
 	"time"
 	"strconv"
 	"github.com/gofiber/fiber/v2"
-    "github.com/dukerupert/weekend-warrior/services"
+    "github.com/dukerupert/weekend-warrior/services/calendar"
 )
 
 type CalendarHandler struct {

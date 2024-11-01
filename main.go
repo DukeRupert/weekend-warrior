@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
-	"context"
-	"log"
+    "log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
-	"github.com/jackc/pgx/v5"
 	"github.com/dukerupert/weekend-warrior/config"
-	"github.com/dukerupert/weekend-warrior/services"
 	"github.com/dukerupert/weekend-warrior/handlers"
+    "github.com/dukerupert/weekend-warrior/services/calendar"
+    "github.com/dukerupert/weekend-warrior/services/db"
 )
 
 // Config holds all configuration for our application
@@ -20,48 +19,56 @@ type Config struct {
 
 // App holds all dependencies for our application
 type App struct {
-    DB     *pgx.Conn
-    Fiber  *fiber.App
-    Config *config.Config
+    DB          *db.Service
+    Fiber       *fiber.App
+    Config      *config.Config
+    Calendar    *calendar.Service
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
-    // Connect to database using config
-    conn, err := pgx.Connect(context.Background(), cfg.GetDatabaseURL())
+    // Initialize DB service
+    dbService, err := db.NewService(db.Config{
+        URL: cfg.GetDatabaseURL(),
+    })
     if err != nil {
-        return nil, fmt.Errorf("unable to connect to database: %v", err)
+        return nil, fmt.Errorf("unable to initialize database service: %v", err)
     }
 
     // Create Fiber instance with config
     fiberApp := fiber.New(fiber.Config{
-        ReadTimeout:       cfg.Server.ReadTimeout,
-        WriteTimeout:      cfg.Server.WriteTimeout,
-        Views:            html.New("./views", ".html"),
-        ViewsLayout:      "layouts/main",
+        ReadTimeout:        cfg.Server.ReadTimeout,
+        WriteTimeout:       cfg.Server.WriteTimeout,
+        Views:             html.New("./views", ".html"),
+        ViewsLayout:       "layouts/main",
         PassLocalsToViews: false,
     })
 
+    // Initialize calendar service with the DB pool
+    calendarService := calendar.NewService(dbService.GetPool())
+
     return &App{
-        DB:     conn,
-        Fiber:  fiberApp,
-        Config: cfg,
+        DB:       dbService,
+        Fiber:    fiberApp,
+        Config:   cfg,
+        Calendar: calendarService,
     }, nil
 }
 
 // Setup configures our routes and middleware
 func (a *App) Setup() {
-    // Store DB connection in context for handlers to use
+    // Store DB pool in context for handlers to use
     a.Fiber.Use(func(c *fiber.Ctx) error {
-        c.Locals("db", a.DB)
+        c.Locals("db", a.DB.GetPool())
         return c.Next()
     })
 
-	// Create calendar service
-    calendarService := calendar.NewService(a.DB)
-    
     // Create calendar handler
-    calendarHandler := handlers.NewCalendarHandler(calendarService)
+    calendarHandler := handlers.NewCalendarHandler(a.Calendar)
 
+    // Initialize and register facility handler
+    facilityHandler := handlers.NewFacilityHandler(a.DB)
+    facilityHandler.RegisterRoutes(a.Fiber)
+    
     // Setup routes
     a.Fiber.Get("/", calendarHandler.CalendarHandler)
 }
@@ -73,22 +80,22 @@ func (a *App) Start() error {
 
 // Cleanup handles graceful shutdown
 func (a *App) Cleanup() {
-    if err := a.DB.Close(context.Background()); err != nil {
-        log.Printf("Error closing DB connection: %v", err)
+    if a.DB != nil {
+        a.DB.Close()
     }
 }
 
 func main() {
-	// Load configuration
+    // Load configuration
     cfg, err := config.LoadConfig(".env")
     if err != nil {
         log.Fatalf("Failed to load configuration: %v", err)
     }
 
-    // Create new app instance with configuration
+    // Create new app
     app, err := NewApp(cfg)
     if err != nil {
-        log.Fatalf("Failed to create app: %v", err)
+        panic(err)
     }
     defer app.Cleanup()
 
