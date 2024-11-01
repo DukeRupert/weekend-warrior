@@ -7,8 +7,8 @@ import (
 	"github.com/gofiber/template/html/v2"
 	"github.com/dukerupert/weekend-warrior/config"
 	"github.com/dukerupert/weekend-warrior/handlers"
+    "github.com/dukerupert/weekend-warrior/db"
     "github.com/dukerupert/weekend-warrior/services/calendar"
-    "github.com/dukerupert/weekend-warrior/services/db"
 )
 
 // Config holds all configuration for our application

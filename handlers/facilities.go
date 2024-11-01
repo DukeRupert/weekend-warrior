@@ -5,8 +5,8 @@ import (
 	"fmt"
     "strconv"
     "github.com/gofiber/fiber/v2"
-    "github.com/dukerupert/weekend-warrior/services/db"
-	"github.com/dukerupert/weekend-warrior/services/db/models"
+    "github.com/dukerupert/weekend-warrior/db"
+	"github.com/dukerupert/weekend-warrior/models"
 )
 
 // FacilityHandler handles HTTP requests for facilities

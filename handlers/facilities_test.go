@@ -5,16 +5,17 @@ import (
     "bytes"
     "encoding/json"
     "fmt"
-    "io"
-    "net/http"
+    "log"
+    "context"
     "testing"
-
+    "net/http/httptest"
     "github.com/gofiber/fiber/v2"
+    "github.com/gofiber/template/html/v2"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
     "github.com/dukerupert/weekend-warrior/config"
     "github.com/dukerupert/weekend-warrior/db"
-    "github.com/dukerupert/weekend-warrior/db/models"
+    "github.com/dukerupert/weekend-warrior/models"
 )
 
 // testApp holds the test application instance
@@ -30,16 +31,19 @@ func setupTestApp(t *testing.T, cfg *config.Config) *testApp {
 
     // Initialize DB service with test database connection
     dbService, err := db.NewService(db.Config{
-        URL: cfg.GetDatabaseURL()
+        URL: cfg.GetDatabaseURL(),
     })
-    if err != nil {
-        return nil, fmt.Errorf("unable to initialize database service: %v", err)
-    }
     
     require.NoError(t, err)
 
-    // Create Fiber app
-    app := fiber.New()
+    // Create Fiber instance with config
+    app := fiber.New(fiber.Config{
+        ReadTimeout:        cfg.Server.ReadTimeout,
+        WriteTimeout:       cfg.Server.WriteTimeout,
+        Views:             html.New("../views", ".html"),
+        ViewsLayout:       "layouts/main",
+        PassLocalsToViews: false,
+    })
 
     // Create handler
     handler := NewFacilityHandler(dbService)
@@ -55,16 +59,19 @@ func setupTestApp(t *testing.T, cfg *config.Config) *testApp {
 // clearFacilities removes all facilities from the test database
 func clearFacilities(t *testing.T, dbService *db.Service) {
     t.Helper()
-    _, err := dbService.GetPool().Exec(
+    
+   _, err := dbService.Exec(
         context.Background(),
-        "DELETE FROM facilities",
+        "TRUNCATE TABLE facilities CASCADE",
     )
     require.NoError(t, err)
 }
 
 func TestFacilityEndpoints(t *testing.T) {
+    // Print a header for the entire test suite
+    t.Log("\n==================== Facility Endpoints Test Suite ====================")
     // Load configuration
-    cfg, err := config.LoadConfig(".env")
+    cfg, err := config.LoadConfig("../.env.testing")
     if err != nil {
         log.Fatalf("Failed to load configuration: %v", err)
     }
@@ -72,6 +79,8 @@ func TestFacilityEndpoints(t *testing.T) {
     defer app.dbService.Close()
 
     t.Run("CRUD Operations", func(t *testing.T) {
+        t.Log("\n----- Starting CRUD Operations Tests -----")
+        defer t.Log("----- Completed CRUD Operations Tests -----\n")
         // Clear the database before testing
         clearFacilities(t, app.dbService)
 

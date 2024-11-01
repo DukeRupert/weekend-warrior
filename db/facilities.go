@@ -4,7 +4,7 @@ package db
 import (
     "context"
     "fmt"
-    "github.com/dukerupert/weekend-warrior/services/db/models"
+    "github.com/dukerupert/weekend-warrior/models"
 )
 
 // CreateFacility creates a new facility in the database
