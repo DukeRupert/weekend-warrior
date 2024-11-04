@@ -223,6 +223,10 @@ func (h *ControllerHandler) ShowEditForm(c *fiber.Ctx) error {
 	})
 }
 
+func (h *ControllerHandler) ShowScheduleForm(c *fiber.Ctx) error {
+	return c.Render("controllers/schedule", fiber.Map{})
+}
+
 // RegisterRoutes registers all controller routes
 func (h *ControllerHandler) RegisterRoutes(app *fiber.App) {
 	controllers := app.Group("/controllers")
@@ -244,4 +248,5 @@ func (h *ControllerHandler) RegisterRoutes(app *fiber.App) {
 
 	controllers.Get("/new", h.ShowCreateForm)
 	controllers.Get("/edit/:id", h.ShowEditForm)
+	controllers.Get("/schedule", h.ShowScheduleForm)
 }

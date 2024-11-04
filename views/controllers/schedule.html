@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Controller</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .container {
+            background-color: #f9fafb;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        .weekday-list {
+            display: grid;
+            gap: 0.5rem;
+        }
+        .weekday-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            background-color: white;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .weekday-item:hover {
+            background-color: #f3f4f6;
+        }
+        .weekday-item.selected {
+            background-color: #dbeafe;
+            border-color: #2563eb;
+        }
+        .weekday-item input {
+            margin-right: 0.75rem;
+        }
+        input[type="date"] {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+        button {
+            background-color: #2563eb;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background-color: #1d4ed8;
+        }
+        button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 4px;
+            background-color: #f3f4f6;
+        }
+        .selection-count {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Schedule Controller</h1>
+        <form id="scheduleForm">
+            <div class="form-group">
+                <label>Select Two Protected Days:</label>
+                <div class="weekday-list" id="weekdayList">
+                    <label class="weekday-item">
+                        <input type="checkbox" name="weekday" value="Monday"> Monday
+                    </label>
+                    <label class="weekday-item">
+                        <input type="checkbox" name="weekday" value="Tuesday"> Tuesday
+                    </label>
+                    <label class="weekday-item">
+                        <input type="checkbox" name="weekday" value="Wednesday"> Wednesday
+                    </label>
+                    <label class="weekday-item">
+                        <input type="checkbox" name="weekday" value="Thursday"> Thursday
+                    </label>
+                    <label class="weekday-item">
+                        <input type="checkbox" name="weekday" value="Friday"> Friday
+                    </label>
+                    <label class="weekday-item">
+                        <input type="checkbox" name="weekday" value="Saturday"> Saturday
+                    </label>
+                    <label class="weekday-item">
+                        <input type="checkbox" name="weekday" value="Sunday"> Sunday
+                    </label>
+                </div>
+                <div class="selection-count">Selected: <span id="selectedCount">0</span>/2 days</div>
+            </div>
+
+            <div class="form-group">
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate" required>
+            </div>
+
+            <button type="submit" id="submitBtn" disabled>Set Schedule</button>
+        </form>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const weekdayList = document.getElementById('weekdayList');
+        const selectedCount = document.getElementById('selectedCount');
+        const submitBtn = document.getElementById('submitBtn');
+        const checkboxes = document.querySelectorAll('input[name="weekday"]');
+
+        // Handle checkbox selections
+        weekdayList.addEventListener('change', function(e) {
+            if (e.target.type === 'checkbox') {
+                const checkedBoxes = document.querySelectorAll('input[name="weekday"]:checked');
+                
+                // Update selected count
+                selectedCount.textContent = checkedBoxes.length;
+
+                // If more than 2 are selected, uncheck the last one
+                if (checkedBoxes.length > 2) {
+                    e.target.checked = false;
+                    selectedCount.textContent = 2;
+                }
+
+                // Update visual states
+                checkboxes.forEach(checkbox => {
+                    const parentItem = checkbox.closest('.weekday-item');
+                    parentItem.classList.toggle('selected', checkbox.checked);
+
+                    // Disable unchecked boxes when 2 are selected
+                    if (!checkbox.checked) {
+                        checkbox.disabled = checkedBoxes.length >= 2;
+                    }
+                });
+
+                // Enable/disable submit button
+                submitBtn.disabled = checkedBoxes.length !== 2;
+            }
+        });
+
+        document.getElementById('scheduleForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const checkedBoxes = document.querySelectorAll('input[name="weekday"]:checked');
+            const selectedDays = Array.from(checkedBoxes).map(cb => cb.value);
+            const startDate = document.getElementById('startDate').value;
+
+            // Calculate the next 4 weeks of protected days
+            const resultDiv = document.getElementById('result');
+            const startDateTime = new Date(startDate);
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            
+            let protectedDates = [];
+            let currentDate = new Date(startDateTime);
+
+            // Look ahead 4 weeks
+            for (let i = 0; i < 28; i++) {
+                const dayName = days[currentDate.getDay()];
+                if (selectedDays.includes(dayName)) {
+                    protectedDates.push(new Date(currentDate));
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            // Display results
+            resultDiv.innerHTML = '<h3>Protected Days Schedule:</h3>';
+            protectedDates.forEach(date => {
+                resultDiv.innerHTML += `
+                    <div>${days[date.getDay()]}, ${date.toLocaleDateString()}</div>
+                `;
+            });
+        });
+    </script>
+</body>
+</html>

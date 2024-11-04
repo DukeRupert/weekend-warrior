@@ -172,4 +172,3 @@ func (h *FacilityHandler) RegisterRoutes(app *fiber.App) {
 	// Delete facility by code
 	facilities.Delete("/code/:code", h.DeleteFacilityByCode)
 }
-

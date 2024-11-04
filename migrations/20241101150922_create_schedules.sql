@@ -3,7 +3,6 @@
 CREATE TABLE IF NOT EXISTS schedules(
     id SERIAL PRIMARY KEY,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    name TEXT NOT NULL,
     rdos INTEGER[],
     anchor DATE,
     controller_id INTEGER NOT NULL UNIQUE REFERENCES controllers(id)

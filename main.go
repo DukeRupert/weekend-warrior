@@ -73,6 +73,10 @@ func (a *App) Setup() {
 	controllersHandler := handlers.NewControllerHandler(a.DB)
 	controllersHandler.RegisterRoutes(a.Fiber)
 
+	// Initialize and register schedule handlers
+	scheduleHandler := handlers.NewScheduleHandler(a.DB)
+	scheduleHandler.RegisterRoutes(a.Fiber)
+
 	// Setup routes
 	a.Fiber.Get("/", calendarHandler.CalendarHandler)
 }

@@ -36,16 +36,14 @@ VALUES
     );
 
 -- Optional: Create schedules for both controllers
-INSERT INTO schedules (name, rdos, anchor, controller_id)
+INSERT INTO schedules (rdos, anchor, controller_id)
 VALUES 
     (
-        'White Council Schedule',
         ARRAY[0, 1],  -- Saturday and Sunday off
         '2024-01-01', -- Anchor date
         (SELECT id FROM controllers WHERE email = 'gandalf@white-tower.mt')
     ),
     (
-        'Guard of the Citadel Schedule',
         ARRAY[2, 3],  -- Monday and Tuesday off
         '2024-01-01', -- Anchor date
         (SELECT id FROM controllers WHERE email = 'pippin@citadel.mt')
