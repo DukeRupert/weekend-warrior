@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>{{.Title}}</title>
+    <style>
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+
+        .error {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .success {
+            color: #28a745;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .loading {
+            display: none;
+            margin-left: 10px;
+        }
+
+        .required {
+            color: #dc3545;
+            margin-left: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 id="formTitle">{{.Title}}</h2>
+        <form id="controllerForm">
+            <div class="form-group">
+                <label for="facility">Facility<span class="required">*</span></label>
+                <select id="facility" name="facility_id" required>
+                    <option value="">Select a facility</option>
+                </select>
+                <div id="facilityError" class="error"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="name">Name<span class="required">*</span></label>
+                <input type="text" id="name" name="name" required 
+                    value="{{if .Controller}}{{.Controller.Name}}{{end}}">
+                <div id="nameError" class="error"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="initials">Initials (2 characters)<span class="required">*</span></label>
+                <input type="text" id="initials" name="initials" maxlength="2" required 
+                    value="{{if .Controller}}{{.Controller.Initials}}{{end}}">
+                <div id="initialsError" class="error"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email<span class="required">*</span></label>
+                <input type="email" id="email" name="email" required 
+                    value="{{if .Controller}}{{.Controller.Email}}{{end}}">
+                <div id="emailError" class="error"></div>
+            </div>
+
+            <button type="submit">{{if .EditMode}}Update{{else}}Create{{end}} Controller</button>
+            <span class="loading">Processing...</span>
+        </form>
+        <div id="successMessage" class="success"></div>
+    </div>    
+     <script>
+        // Initialize edit mode and controller data from server
+        const isEditMode = {{.EditMode}};
+        const controllerId = {{if .Controller}}{{.Controller.ID}}{{else}}null{{end}};
+        const preloadedFacilityId = {{if .Controller}}{{.Controller.FacilityID}}{{else}}null{{end}};
+
+        // Load facilities for dropdown
+        async function loadFacilities() {
+            try {
+                const response = await fetch('/facilities');
+                const data = await response.json();
+                const facilitySelect = document.getElementById('facility');
+                
+                data.data.forEach(facility => {
+                    const option = document.createElement('option');
+                    option.value = facility.id;
+                    option.textContent = facility.name;
+                    facilitySelect.appendChild(option);
+                });
+
+                // Set the facility if we're in edit mode
+                if (preloadedFacilityId) {
+                    facilitySelect.value = preloadedFacilityId;
+                }
+            } catch (error) {
+                console.error('Error loading facilities:', error);
+                document.getElementById('facilityError').textContent = 'Error loading facilities';
+                document.getElementById('facilityError').style.display = 'block';
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('controllerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            // Reset error messages
+            document.querySelectorAll('.error').forEach(el => el.style.display = 'none');
+            document.getElementById('successMessage').style.display = 'none';
+
+            const formData = new FormData(this);
+            const { isValid, errors } = validateForm(formData);
+
+            if (!isValid) {
+                Object.keys(errors).forEach(key => {
+                    const errorElement = document.getElementById(`${key}Error`);
+                    if (errorElement) {
+                        errorElement.textContent = errors[key];
+                        errorElement.style.display = 'block';
+                    }
+                });
+                return;
+            }
+
+            // Show loading state
+            const submitButton = this.querySelector('button');
+            const loadingSpan = document.querySelector('.loading');
+            submitButton.disabled = true;
+            loadingSpan.style.display = 'inline';
+
+            try {
+                const url = isEditMode ? `/controllers/${controllerId}` : '/controllers';
+                const method = isEditMode ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        facility_id: parseInt(formData.get('facility_id')),
+                        name: formData.get('name'),
+                        initials: formData.get('initials').toUpperCase(),
+                        email: formData.get('email')
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to save controller');
+                }
+
+                // Show success message
+                document.getElementById('successMessage').textContent = 
+                    `Controller ${isEditMode ? 'updated' : 'created'} successfully!`;
+                document.getElementById('successMessage').style.display = 'block';
+
+                if (!isEditMode) {
+                    // Reset form only for create mode
+                    this.reset();
+                }
+
+            } catch (error) {
+                // Show error message
+                const errorElement = document.getElementById('nameError');
+                errorElement.textContent = error.message;
+                errorElement.style.display = 'block';
+            } finally {
+                // Reset loading state
+                submitButton.disabled = false;
+                loadingSpan.style.display = 'none';
+            }
+        });
+
+        // Validate form input
+        function validateForm(formData) {
+            let isValid = true;
+            const errors = {};
+
+            if (!formData.get('facility_id')) {
+                errors.facility = 'Please select a facility';
+                isValid = false;
+            }
+
+            if (!formData.get('name')) {
+                errors.name = 'Name is required';
+                isValid = false;
+            }
+
+            const initials = formData.get('initials');
+            if (!initials) {
+                errors.initials = 'Initials are required';
+                isValid = false;
+            } else if (initials.length !== 2) {
+                errors.initials = 'Initials must be exactly 2 characters';
+                isValid = false;
+            }
+
+            const email = formData.get('email');
+            if (!email) {
+                errors.email = 'Email is required';
+                isValid = false;
+            } else if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                errors.email = 'Please enter a valid email address';
+                isValid = false;
+            }
+
+            return { isValid, errors };
+        }
+
+        // Auto-uppercase initials input
+        document.getElementById('initials').addEventListener('input', function(e) {
+            this.value = this.value.toUpperCase();
+        });
+
+        // Initialize the form
+        loadFacilities();
+    </script>
+</body>
+</html>
