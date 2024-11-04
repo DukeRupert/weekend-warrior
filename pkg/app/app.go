@@ -74,6 +74,21 @@ func (a *App) Setup() {
 
 // setupHandlers initializes and registers all handlers
 func (a *App) setupHandlers() {
+	// Initialize auth middleware with defeault options
+	authMiddleware, err := middleware.NewAuthMiddleware(a.DB.GetPool(), middleware.DefaultSessionOptions())
+	if err != nil {
+		log.Error().Err(err).Msg("failed to initialize auth middleware")
+		fmt.Errorf("unable to initialize auth middleware: %v", err)
+	}
+
+	// Protected routes
+	api := a.Fiber.Group("/app")
+	api.Use(authMiddleware.Protected()) // Protect all routes under /api
+
+	// Create login handler
+	loginHandler := handlers.NewLoginHandler(a.DB, authMiddleware)
+	loginHandler.RegisterRoutes(a.Fiber)
+
 	// Create calendar handler
 	calendarHandler := handlers.NewCalendarHandler(a.Calendar)
 
@@ -83,7 +98,7 @@ func (a *App) setupHandlers() {
 
 	// Initialize and register controllers handler
 	controllersHandler := handlers.NewControllerHandler(a.DB)
-	controllersHandler.RegisterRoutes(a.Fiber)
+	controllersHandler.RegisterRoutes(a.Fiber, authMiddleware)
 
 	// Initialize and register schedule handlers
 	scheduleHandler := handlers.NewScheduleHandler(a.DB)

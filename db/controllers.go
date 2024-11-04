@@ -4,19 +4,39 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/dukerupert/weekend-warrior/db/models"
+	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // CreateController creates a new controller in the database
 func (s *Service) CreateController(ctx context.Context, params models.CreateControllerParams) (*models.Controller, error) {
-	var controller models.Controller
+	logger := zerolog.Ctx(ctx).With().
+		Str("name", params.Name).
+		Str("email", params.Email).
+		Int("facility_id", params.FacilityID).
+		Str("operation", "CreateController").
+		Logger()
 
-	err := s.pool.QueryRow(ctx, `
-        INSERT INTO controllers (name, initials, email, facility_id)
-        VALUES ($1, $2, $3, $4)
+	logger.Debug().Msg("creating new controller")
+
+	// Hash the password with bcrypt
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(params.Password), bcrypt.DefaultCost)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to hash password")
+		return nil, fmt.Errorf("error hashing password: %w", err)
+	}
+
+	var controller models.Controller
+	err = s.pool.QueryRow(ctx, `
+        INSERT INTO controllers (name, initials, email, facility_id, password)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, created_at, name, initials, email, facility_id
-    `, params.Name, params.Initials, params.Email, params.FacilityID).Scan(
+    `, params.Name, params.Initials, params.Email, params.FacilityID, hashedPassword).Scan(
 		&controller.ID,
 		&controller.CreatedAt,
 		&controller.Name,
@@ -25,8 +45,14 @@ func (s *Service) CreateController(ctx context.Context, params models.CreateCont
 		&controller.FacilityID,
 	)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to create controller in database")
 		return nil, fmt.Errorf("error creating controller: %w", err)
 	}
+
+	logger.Info().
+		Int("controller_id", controller.ID).
+		Time("created_at", controller.CreatedAt).
+		Msg("successfully created controller")
 
 	return &controller, nil
 }
@@ -50,6 +76,46 @@ func (s *Service) GetControllerByID(ctx context.Context, id int) (*models.Contro
 	if err != nil {
 		return nil, fmt.Errorf("error getting controller: %w", err)
 	}
+
+	return &controller, nil
+}
+
+// GetControllerByEmail retrieves a controller by their email address
+func (s *Service) GetControllerByEmail(ctx context.Context, email string) (*models.Controller, error) {
+	logger := zerolog.Ctx(ctx).With().
+		Str("email", email).
+		Str("operation", "GetControllerByEmail").
+		Logger()
+
+	logger.Debug().Msg("retrieving controller by email")
+
+	var controller models.Controller
+	err := s.pool.QueryRow(ctx, `
+        SELECT id, created_at, name, initials, email, facility_id, password
+        FROM controllers
+        WHERE email = $1
+    `, email).Scan(
+		&controller.ID,
+		&controller.CreatedAt,
+		&controller.Name,
+		&controller.Initials,
+		&controller.Email,
+		&controller.FacilityID,
+		&controller.Password,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			logger.Debug().Msg("controller not found")
+			return nil, fmt.Errorf("controller not found with email %s", email)
+		}
+		logger.Error().Err(err).Msg("failed to get controller from database")
+		return nil, fmt.Errorf("error getting controller: %w", err)
+	}
+
+	logger.Debug().
+		Int("controller_id", controller.ID).
+		Time("created_at", controller.CreatedAt).
+		Msg("successfully retrieved controller")
 
 	return &controller, nil
 }
@@ -129,14 +195,47 @@ func (s *Service) ListControllers(ctx context.Context) ([]models.Controller, err
 
 // UpdateController updates an existing controller
 func (s *Service) UpdateController(ctx context.Context, id int, params models.CreateControllerParams) (*models.Controller, error) {
-	var controller models.Controller
+	logger := zerolog.Ctx(ctx).With().
+		Int("controller_id", id).
+		Str("name", params.Name).
+		Str("email", params.Email).
+		Int("facility_id", params.FacilityID).
+		Str("operation", "UpdateController").
+		Logger()
 
-	err := s.pool.QueryRow(ctx, `
-        UPDATE controllers
-        SET name = $1, initials = $2, email = $3, facility_id = $4
-        WHERE id = $5
-        RETURNING id, created_at, name, initials, email, facility_id
-    `, params.Name, params.Initials, params.Email, params.FacilityID, id).Scan(
+	logger.Debug().Msg("updating controller")
+
+	// Build the query dynamically based on whether a password update is needed
+	var query strings.Builder
+	var args []interface{}
+	query.WriteString(`
+		UPDATE controllers
+		SET name = $1, initials = $2, email = $3, facility_id = $4`)
+	args = append(args, params.Name, params.Initials, params.Email, params.FacilityID)
+
+	// Only update password if it's provided (not empty)
+	if params.Password != "" {
+		logger.Debug().Msg("updating password")
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(params.Password), bcrypt.DefaultCost)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to hash password")
+			return nil, fmt.Errorf("error hashing password: %w", err)
+		}
+		query.WriteString(`, password = $5`)
+		args = append(args, hashedPassword)
+		args = append(args, id)
+		query.WriteString(`
+			WHERE id = $6
+			RETURNING id, created_at, name, initials, email, facility_id`)
+	} else {
+		args = append(args, id)
+		query.WriteString(`
+			WHERE id = $5
+			RETURNING id, created_at, name, initials, email, facility_id`)
+	}
+
+	var controller models.Controller
+	err := s.pool.QueryRow(ctx, query.String(), args...).Scan(
 		&controller.ID,
 		&controller.CreatedAt,
 		&controller.Name,
@@ -145,8 +244,18 @@ func (s *Service) UpdateController(ctx context.Context, id int, params models.Cr
 		&controller.FacilityID,
 	)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			logger.Error().Msg("controller not found")
+			return nil, fmt.Errorf("controller not found with id %d", id)
+		}
+		logger.Error().Err(err).Msg("failed to update controller in database")
 		return nil, fmt.Errorf("error updating controller: %w", err)
 	}
+
+	logger.Info().
+		Time("updated_at", time.Now()).
+		Bool("password_updated", params.Password != "").
+		Msg("successfully updated controller")
 
 	return &controller, nil
 }
