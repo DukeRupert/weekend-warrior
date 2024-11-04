@@ -7,9 +7,13 @@ import (
 	"github.com/dukerupert/weekend-warrior/config"
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/handlers"
+	"github.com/dukerupert/weekend-warrior/logger"
+	"github.com/dukerupert/weekend-warrior/middleware"
 	"github.com/dukerupert/weekend-warrior/services/calendar"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
+	"github.com/rs/zerolog/log"
 )
 
 // App holds all dependencies for our application
@@ -22,11 +26,15 @@ type App struct {
 
 // New creates a new instance of App with all dependencies
 func New(cfg *config.Config) (*App, error) {
+	// Initialize logger
+	logger.Setup(cfg.Server.Environment)
+
 	// Initialize DB service
 	dbService, err := db.NewService(db.Config{
 		URL: cfg.GetDatabaseURL(),
 	})
 	if err != nil {
+		log.Error().Err(err).Msg("failed to initialize database service")
 		return nil, fmt.Errorf("unable to initialize database service: %v", err)
 	}
 
@@ -37,6 +45,9 @@ func New(cfg *config.Config) (*App, error) {
 		Views:             html.New("./views", ".html"),
 		PassLocalsToViews: false,
 	})
+
+	// Add logger middleware
+	fiberApp.Use(middleware.Logger())
 
 	// Initialize calendar service with the DB pool
 	calendarService := calendar.NewService(dbService.GetPool())

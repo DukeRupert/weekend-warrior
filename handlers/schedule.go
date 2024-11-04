@@ -1,11 +1,10 @@
 package handlers
 
 import (
-	"log"
-
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/models"
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 )
 
 // ScheduleHandler handles HTTP requests for schedules
@@ -97,8 +96,6 @@ func (h *ScheduleHandler) GetScheduleByController(c *fiber.Ctx) error {
 
 // UpdateSchedule handles PUT requests to update an existing schedule
 func (h *ScheduleHandler) UpdateSchedule(c *fiber.Ctx) error {
-	log.Println("UpdateSchedule() called")
-
 	id, err := c.ParamsInt("id")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

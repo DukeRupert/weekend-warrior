@@ -3,34 +3,52 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/models"
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type ControllerHandler struct {
 	dbService *db.Service
+	logger    zerolog.Logger
 }
 
 func NewControllerHandler(dbService *db.Service) *ControllerHandler {
 	return &ControllerHandler{
 		dbService: dbService,
+		logger:    log.With().Str("handler", "controller").Logger(),
 	}
 }
 
 // ListControllers handles GET requests to list all controllers
 func (h *ControllerHandler) ListControllers(c *fiber.Ctx) error {
-	log.Println("ListControllers() called")
+	// Create request-specific logger
+	reqLogger := h.logger.With().
+		Str("method", "ListControllers").
+		Str("request_id", c.GetRespHeader("X-Request-ID")).
+		Logger()
+
+	reqLogger.Info().Msg("retrieving controllers list")
+
 	controllers, err := h.dbService.ListControllers(c.Context())
 	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to retrieve controllers")
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to retrieve controllers",
 			"detail": err.Error(),
 		})
 	}
+
+	reqLogger.Info().
+		Int("controller_count", len(controllers)).
+		Msg("controllers retrieved successfully")
 
 	return c.JSON(fiber.Map{
 		"data": controllers,

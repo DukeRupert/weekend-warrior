@@ -3,12 +3,12 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/models"
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 )
 
 // FacilityHandler handles HTTP requests for facilities
@@ -31,7 +31,6 @@ type CreateFacilityRequest struct {
 
 // ListFacilities handles GET requests to list all facilities
 func (h *FacilityHandler) ListFacilities(c *fiber.Ctx) error {
-	log.Println("ListFacilities() called")
 	facilities, err := h.dbService.ListFacilities(c.Context())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -46,8 +45,12 @@ func (h *FacilityHandler) ListFacilities(c *fiber.Ctx) error {
 }
 
 func (h *FacilityHandler) CreateFacility(c *fiber.Ctx) error {
+	log.Info().Msg("CreateFacility() called")
 	var req CreateFacilityRequest
 	if err := c.BodyParser(&req); err != nil {
+		log.Error().Err(err).
+			Interface("body", c.Body()).
+			Msg("failed to parse request body")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "Invalid request body",
 			"detail": err.Error(),
@@ -108,34 +111,7 @@ func (h *FacilityHandler) DeleteFacility(c *fiber.Ctx) error {
 
 	err = h.dbService.DeleteFacility(c.Context(), id)
 	if err != nil {
-		// Check if facility wasn't found
-		if err.Error() == fmt.Sprintf("facility with ID %d not found", id) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":  "Facility not found",
-				"detail": fmt.Sprintf("no facility found with ID %d", id),
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to delete facility",
-			"detail": err.Error(),
-		})
-	}
-
-	return c.Status(fiber.StatusNoContent).Send(nil)
-}
-
-func (h *FacilityHandler) DeleteFacilityByCode(c *fiber.Ctx) error {
-	code := c.Params("code")
-	if len(code) != 4 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid facility code",
-			"detail": "code must be exactly 4 characters",
-		})
-	}
-
-	err := h.dbService.DeleteFacilityByCode(c.Context(), code)
-	if err != nil {
-		// Check if facility wasn't found
+		// Check if facility wasn''t found
 		if err.Error() == fmt.Sprintf("facility with code %s not found", code) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error":  "Facility not found",
