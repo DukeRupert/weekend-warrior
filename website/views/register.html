@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow">
+            <div>
+                <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                    Create your account
+                </h2>
+            </div>
+            {{if .error}}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <span class="block sm:inline">{{.error}}</span>
+            </div>
+            {{end}}
+            <form class="mt-8 space-y-6" action="/register" method="POST" id="registerForm">
+                <div class="rounded-md shadow-sm space-y-4">
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                        <input id="name" name="name" type="text" required 
+                               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                               placeholder="John Doe">
+                        <p class="hidden text-red-500 text-xs mt-1" id="nameError"></p>
+                    </div>
+
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700">Email address</label>
+                        <input id="email" name="email" type="email" required 
+                               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                               placeholder="you@example.com">
+                        <p class="hidden text-red-500 text-xs mt-1" id="emailError"></p>
+                    </div>
+
+                    <div>
+                        <label for="initials" class="block text-sm font-medium text-gray-700">Initials</label>
+                        <input id="initials" name="initials" type="text" required maxlength="3"
+                               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm uppercase"
+                               placeholder="JD">
+                        <p class="hidden text-red-500 text-xs mt-1" id="initialsError"></p>
+                    </div>
+
+                    <div>
+                        <label for="facility" class="block text-sm font-medium text-gray-700">Facility</label>
+                        <select id="facility" name="facility" required
+                                class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm">
+                            <option value="">Select a facility</option>
+                            {{range .facilities}}
+                            <option value="{{.ID}}">{{.Name}} ({{.Code}})</option>
+                            {{end}}
+                        </select>
+                        <p class="hidden text-red-500 text-xs mt-1" id="facilityError"></p>
+                    </div>
+
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                        <input id="password" name="password" type="password" required
+                               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                               placeholder="********">
+                        <p class="hidden text-red-500 text-xs mt-1" id="passwordError"></p>
+                    </div>
+
+                    <div>
+                        <label for="confirm" class="block text-sm font-medium text-gray-700">Confirm Password</label>
+                        <input id="confirm" name="confirm" type="password" required
+                               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                               placeholder="********">
+                        <p class="hidden text-red-500 text-xs mt-1" id="confirmError"></p>
+                    </div>
+                </div>
+
+                <div>
+                    <button type="submit"
+                            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Register
+                    </button>
+                </div>
+
+                <div class="text-center">
+                    <a href="/login" class="font-medium text-blue-600 hover:text-blue-500">
+                        Already have an account? Sign in
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+   <script>
+                    document.getElementById('registerForm').addEventListener('submit', async function(e) {
+                        e.preventDefault();
+                        
+                        // Reset previous errors
+                        document.querySelectorAll('[id$="Error"]').forEach(el => {
+                            el.classList.add('hidden');
+                            el.textContent = '';
+                        });
+                        
+                        // Create form data object
+                        const formData = new FormData(this);
+                        const data = {};
+                        formData.forEach((value, key) => {
+                            data[key] = value;
+                        });
+
+                        try {
+                            const response = await fetch('/register', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(data)
+                            });
+                            
+                            if (response.ok) {
+                                window.location.href = '/api/v1/controllers';
+                            } else {
+                                const errorData = await response.json();
+                                if (errorData.errors) {
+                                    errorData.errors.forEach(error => {
+                                        const errorElement = document.getElementById(error.Field + 'Error');
+                                        if (errorElement) {
+                                            errorElement.textContent = error.Message;
+                                            errorElement.classList.remove('hidden');
+                                        }
+                                    });
+                                } else if (errorData.error) {
+                                    // Handle general error
+                                    const generalError = document.createElement('div');
+                                    generalError.className = 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4';
+                                    generalError.textContent = errorData.error;
+                                    this.insertBefore(generalError, this.firstChild);
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Registration error:', error);
+                            // Handle network or other errors
+                            const generalError = document.createElement('div');
+                            generalError.className = 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4';
+                            generalError.textContent = 'An error occurred. Please try again later.';
+                            this.insertBefore(generalError, this.firstChild);
+                        }
+                    });
+
+                    // Add input validation
+                    document.getElementById('initials').addEventListener('input', function(e) {
+                        this.value = this.value.toUpperCase();
+                        if (this.value.length > 3) {
+                            this.value = this.value.slice(0, 3);
+                        }
+                    });
+
+                    // Password strength validation
+                    document.getElementById('password').addEventListener('input', function(e) {
+                        const password = this.value;
+                        const errorElement = document.getElementById('passwordError');
+                        
+                        if (password.length < 8) {
+                            errorElement.textContent = 'Password must be at least 8 characters long';
+                            errorElement.classList.remove('hidden');
+                        } else {
+                            errorElement.classList.add('hidden');
+                        }
+                    });
+
+                    // Password match validation
+                    document.getElementById('confirm').addEventListener('input', function(e) {
+                        const password = document.getElementById('password').value;
+                        const errorElement = document.getElementById('confirmError');
+                        
+                        if (this.value !== password) {
+                            errorElement.textContent = 'Passwords do not match';
+                            errorElement.classList.remove('hidden');
+                        } else {
+                            errorElement.classList.add('hidden');
+                        }
+                    });
+
+                    // Email format validation
+                    document.getElementById('email').addEventListener('input', function(e) {
+                        const email = this.value;
+                        const errorElement = document.getElementById('emailError');
+                        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+                        
+                        if (!emailRegex.test(email)) {
+                            errorElement.textContent = 'Please enter a valid email address';
+                            errorElement.classList.remove('hidden');
+                        } else {
+                            errorElement.classList.add('hidden');
+                        }
+                    });
+                </script>
+            </div>
+        </div>
+    </body>
+</html> 

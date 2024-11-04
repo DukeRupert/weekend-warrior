@@ -89,6 +89,9 @@ func (a *App) setupHandlers() {
 	loginHandler := handlers.NewLoginHandler(a.DB, authMiddleware)
 	loginHandler.RegisterRoutes(a.Fiber)
 
+	// Initialize register handler
+	registerHandler := handlers.NewRegisterHandler(a.DB, authMiddleware)
+	registerHandler.RegisterRoutes(a.Fiber)
 	// Create calendar handler
 	calendarHandler := handlers.NewCalendarHandler(a.Calendar)
 
