@@ -1,4 +1,4 @@
-// models/schedule.go
+// db/models/schedule.go
 package models
 
 import (

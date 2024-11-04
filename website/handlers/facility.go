@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/dukerupert/weekend-warrior/db"
-	"github.com/dukerupert/weekend-warrior/models"
+	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -22,7 +22,7 @@ type FacilityHandler struct {
 func NewFacilityHandler(dbService *db.Service) *FacilityHandler {
 	return &FacilityHandler{
 		dbService: dbService,
-		logger:    log.With().Str("handler", "controller").Logger(),
+		logger:    log.With().Str("handler", "facility").Logger(),
 	}
 }
 
@@ -225,75 +225,6 @@ func (h *FacilityHandler) DeleteFacility(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
 
-// DeleteFacilityByCode handles DELETE requests to delete a facility by its code
-func (h *FacilityHandler) DeleteFacilityByCode(c *fiber.Ctx) error {
-	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "DeleteFacilityByCode").
-		Str("request_id", c.GetRespHeader("X-Request-ID")).
-		Logger()
-
-	reqLogger.Info().Msg("processing delete facility by code request")
-
-	// Get facility code from params
-	code := c.Params("code")
-	if code == "" {
-		reqLogger.Error().
-			Msg("facility code parameter is missing")
-
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid request",
-			"detail": "facility code is required",
-		})
-	}
-
-	// Validate code format
-	if len(code) != 4 {
-		reqLogger.Error().
-			Str("code", code).
-			Msg("invalid facility code format")
-
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid facility code",
-			"detail": "code must be exactly 4 characters",
-		})
-	}
-
-	reqLogger.Debug().
-		Str("code", code).
-		Msg("attempting to delete facility by code")
-
-	err := h.dbService.DeleteFacilityByCode(c.Context(), code)
-	if err != nil {
-		if isNotFoundError(err) {
-			reqLogger.Warn().
-				Str("code", code).
-				Msg("facility not found for deletion")
-
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":  "Facility not found",
-				"detail": fmt.Sprintf("no facility found with code %s", code),
-			})
-		}
-
-		reqLogger.Error().
-			Err(err).
-			Str("code", code).
-			Msg("failed to delete facility")
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to delete facility",
-			"detail": err.Error(),
-		})
-	}
-
-	reqLogger.Info().
-		Str("code", code).
-		Msg("facility deleted successfully")
-
-	return c.Status(fiber.StatusNoContent).Send(nil)
-}
-
 // ShowCreateForm renders the facility creation form
 func (h *FacilityHandler) ShowCreateForm(c *fiber.Ctx) error {
 	return c.Render("facilities/create", fiber.Map{
@@ -301,17 +232,24 @@ func (h *FacilityHandler) ShowCreateForm(c *fiber.Ctx) error {
 	})
 }
 
+// GetFacilityControllers returns all controllers for a facility code
+func (h *FacilityHandler) GetFacilityControllers(c *fiber.Ctx) error {
+	return c.Render("facilities/create", fiber.Map{
+		"Title": "Facility Controller List",
+	})
+}
+
 // RegisterRoutes registers all facility routes
 func (h *FacilityHandler) RegisterRoutes(app *fiber.App) {
-	facilities := app.Group("/facilities")
+	facilities := app.Group("api/v1/facilities")
 	// List all facilities
 	facilities.Get("/", h.ListFacilities)
 	// Create new facility endpoint
 	facilities.Post("/", h.CreateFacility)
 	// Create new facility form
-	facilities.Get("/new", h.ShowCreateForm)
+	facilities.Get("/create", h.ShowCreateForm)
 	// Delete facility by ID
 	facilities.Delete("/:id", h.DeleteFacility)
-	// Delete facility by code
-	facilities.Delete("/code/:code", h.DeleteFacilityByCode)
+	// Get controllers at facility
+	facilities.Get("/:code/controllers", h.GetFacilityControllers)
 }

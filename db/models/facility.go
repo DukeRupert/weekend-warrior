@@ -1,4 +1,4 @@
-// services/db/models/facility.go
+// db/models/facility.go
 package models
 
 import "time"

@@ -1,4 +1,4 @@
-// services/db/models/controller.go
+// db/models/controller.go
 package models
 
 import "time"

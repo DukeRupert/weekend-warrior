@@ -4,13 +4,13 @@ package main
 import (
 	"log"
 
-	"github.com/dukerupert/weekend-warrior/config"
 	"github.com/dukerupert/weekend-warrior/pkg/app"
+	"github.com/dukerupert/weekend-warrior/pkg/config"
 )
 
 func main() {
 	// Load configuration
-	cfg, err := config.LoadConfig(".env.local")
+	cfg, err := config.LoadConfig(".env")
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}

@@ -4,12 +4,12 @@ package app
 import (
 	"fmt"
 
-	"github.com/dukerupert/weekend-warrior/config"
 	"github.com/dukerupert/weekend-warrior/db"
-	"github.com/dukerupert/weekend-warrior/handlers"
 	"github.com/dukerupert/weekend-warrior/logger"
 	"github.com/dukerupert/weekend-warrior/middleware"
+	"github.com/dukerupert/weekend-warrior/pkg/config"
 	"github.com/dukerupert/weekend-warrior/services/calendar"
+	"github.com/dukerupert/weekend-warrior/website/handlers"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
@@ -42,7 +42,7 @@ func New(cfg *config.Config) (*App, error) {
 	fiberApp := fiber.New(fiber.Config{
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
-		Views:             html.New("./views", ".html"),
+		Views:             html.New("./website/views", ".html"),
 		PassLocalsToViews: false,
 	})
 

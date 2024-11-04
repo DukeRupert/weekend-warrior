@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dukerupert/weekend-warrior/models"
+	"github.com/dukerupert/weekend-warrior/db/models"
 )
 
 // CreateSchedule creates a new schedule in the database

@@ -63,4 +63,3 @@ func (h *CalendarHandler) CalendarHandler(c *fiber.Ctx) error {
 
 	return c.Render("calendar", data)
 }
-

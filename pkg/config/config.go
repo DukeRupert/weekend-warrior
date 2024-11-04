@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
+	Supabase SupabaseConfig
 	Redis    RedisConfig
 }
 
@@ -30,6 +31,11 @@ type DatabaseConfig struct {
 	Password string
 	Name     string
 	SSLMode  string
+}
+
+type SupabaseConfig struct {
+	Url      string
+	Anon_key string
 }
 
 type RedisConfig struct {
@@ -67,6 +73,12 @@ func LoadConfig(envFile string) (*Config, error) {
 		Password: getEnv("DB_PASSWORD", ""),
 		Name:     getEnv("DB_NAME", ""),
 		SSLMode:  getEnv("DB_SSL_MODE", "disable"),
+	}
+
+	// Load Supabase configuration
+	config.Supabase = SupabaseConfig{
+		Url:      getEnv("SUPABASE_URL", ""),
+		Anon_key: getEnv("SUPABASE_ANON_KEY", ""),
 	}
 
 	// Load Redis configuration
@@ -133,4 +145,3 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 	}
 	return defaultValue
 }
-

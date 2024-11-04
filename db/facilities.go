@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dukerupert/weekend-warrior/models"
+	"github.com/dukerupert/weekend-warrior/db/models"
 )
 
 // CreateFacility creates a new facility in the database
@@ -138,4 +138,3 @@ func (s *Service) DeleteFacilityByCode(ctx context.Context, code string) error {
 
 	return nil
 }
-

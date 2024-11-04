@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/dukerupert/weekend-warrior/db"
-	"github.com/dukerupert/weekend-warrior/models"
+	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -49,54 +49,6 @@ func (h *ControllerHandler) ListControllers(c *fiber.Ctx) error {
 	reqLogger.Info().
 		Int("controller_count", len(controllers)).
 		Msg("controllers retrieved successfully")
-
-	return c.JSON(fiber.Map{
-		"data": controllers,
-	})
-}
-
-// GetControllersByFacility handles GET requests to list controllers by facility
-func (h *ControllerHandler) GetControllersByFacility(c *fiber.Ctx) error {
-	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "GetControllersByFacility").
-		Str("request_id", c.GetRespHeader("X-Request-ID")).
-		Logger()
-
-	facilityID, err := strconv.Atoi(c.Params("facilityId"))
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Str("facility_id_raw", c.Params("facilityId")).
-			Msg("invalid facility ID format")
-
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid facility ID",
-			"detail": "ID must be a number",
-		})
-	}
-
-	reqLogger.Debug().
-		Int("facility_id", facilityID).
-		Msg("retrieving controllers for facility")
-
-	controllers, err := h.dbService.GetControllersByFacility(c.Context(), facilityID)
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Int("facility_id", facilityID).
-			Msg("failed to retrieve controllers for facility")
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to retrieve controllers",
-			"detail": err.Error(),
-		})
-	}
-
-	reqLogger.Info().
-		Int("facility_id", facilityID).
-		Int("controller_count", len(controllers)).
-		Msg("successfully retrieved controllers for facility")
 
 	return c.JSON(fiber.Map{
 		"data": controllers,
@@ -469,8 +421,7 @@ func (h *ControllerHandler) ShowEditForm(c *fiber.Ctx) error {
 
 	// Render the form
 	err = c.Render("controllers/manage", fiber.Map{
-		"Title":      "Edit Controller",
-		"EditMode":   true,
+		"Title":      "Assign Schedule",
 		"Controller": controller,
 	})
 	if err != nil {
@@ -506,7 +457,56 @@ func (h *ControllerHandler) ShowScheduleForm(c *fiber.Ctx) error {
 		Str("template", "controllers/schedule").
 		Msg("rendering controller schedule form")
 
-	err := c.Render("controllers/schedule", fiber.Map{})
+	// Validate the ID
+	controllerID := c.Params("id")
+	id, err := strconv.Atoi(controllerID)
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Str("id_raw", controllerID).
+			Msg("invalid controller ID format")
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid controller ID",
+			"detail": "ID must be a number",
+		})
+	}
+
+	// Log attempt to fetch controller
+	reqLogger.Debug().
+		Int("controller_id", id).
+		Msg("fetching controller data for edit form")
+
+	// Fetch the controller data
+	controller, err := h.dbService.GetControllerByID(c.Context(), id)
+	if err != nil {
+		if isNotFoundError(err) {
+			reqLogger.Warn().
+				Int("controller_id", id).
+				Msg("controller not found for edit form")
+
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "Controller not found",
+				"detail": fmt.Sprintf("no controller found with ID %d", id),
+			})
+		}
+
+		reqLogger.Error().
+			Err(err).
+			Int("controller_id", id).
+			Msg("failed to retrieve controller for edit form")
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to retrieve controller",
+			"detail": err.Error(),
+		})
+	}
+
+	err = c.Render("controllers/schedule", fiber.Map{
+		"Title":      "Edit Controller",
+		"EditMode":   true,
+		"Controller": controller,
+	})
 	if err != nil {
 		reqLogger.Error().
 			Err(err).
@@ -526,16 +526,13 @@ func (h *ControllerHandler) ShowScheduleForm(c *fiber.Ctx) error {
 
 // RegisterRoutes registers all controller routes
 func (h *ControllerHandler) RegisterRoutes(app *fiber.App) {
-	controllers := app.Group("/controllers")
+	controllers := app.Group("api/v1/controllers")
 
 	// List all controllers
 	controllers.Get("/", h.ListControllers)
 	controllers.Post("/", h.CreateController)
 	controllers.Put("/:id", h.UpdateController)
 	controllers.Delete("/:id", h.DeleteController)
-
-	// List controllers by facility
-	controllers.Get("/facility/:facilityId", h.GetControllersByFacility)
 
 	// Create new controller
 	controllers.Get("/new", h.ShowCreateForm)
@@ -544,5 +541,5 @@ func (h *ControllerHandler) RegisterRoutes(app *fiber.App) {
 	controllers.Get("/edit/:id", h.ShowEditForm)
 
 	// Assign schedule to controller
-	controllers.Get("/schedule", h.ShowScheduleForm)
+	controllers.Get("/schedule/:id", h.ShowScheduleForm)
 }

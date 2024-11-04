@@ -1,11 +1,11 @@
-// services/db/controllers.go
+// db/controllers.go
 package db
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/dukerupert/weekend-warrior/models"
+	"github.com/dukerupert/weekend-warrior/db/models"
 )
 
 // CreateController creates a new controller in the database
