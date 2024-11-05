@@ -106,40 +106,6 @@ func (s *Service) ListFacilities(ctx context.Context) ([]models.Facility, error)
 	return facilities, nil
 }
 
-// ListFacilities retrieves all facilities from the database
-func (s *Service) aListFacilities(ctx context.Context) ([]models.Facility, error) {
-	rows, err := s.pool.Query(ctx, `
-        SELECT id, created_at, name, code
-        FROM facilities
-        ORDER BY name ASC
-    `)
-	if err != nil {
-		return nil, fmt.Errorf("error listing facilities: %w", err)
-	}
-	defer rows.Close()
-
-	var facilities []models.Facility
-	for rows.Next() {
-		var facility models.Facility
-		err := rows.Scan(
-			&facility.ID,
-			&facility.CreatedAt,
-			&facility.Name,
-			&facility.Code,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error scanning facility row: %w", err)
-		}
-		facilities = append(facilities, facility)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating facility rows: %w", err)
-	}
-
-	return facilities, nil
-}
-
 // DeleteFacility deletes a facility by its ID
 func (s *Service) DeleteFacility(ctx context.Context, id int) error {
 	result, err := s.pool.Exec(ctx, `

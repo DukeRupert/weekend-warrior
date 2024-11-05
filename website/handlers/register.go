@@ -28,6 +28,7 @@ type RegistrationData struct {
 	Password string `form:"password"`
 	Confirm  string `form:"confirm"`
 	Facility int    `form:"facility"`
+	Role 	 string `form:"role"`
 }
 
 // ValidationError represents form validation errors
@@ -126,15 +127,41 @@ func (h *RegisterHandler) validateRegistration(data *RegistrationData) []Validat
 
 // HandleRegister processes the registration form
 func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
+	// Create request-specific logger
+	reqLogger := h.logger.With().
+		Str("method", "HandleRegister").
+		Str("request_id", c.GetRespHeader("X-Request-ID")).
+		Logger()
+
+	reqLogger.Info().Msg("processing registration request")
+
 	var data RegistrationData
 	if err := c.BodyParser(&data); err != nil {
+		reqLogger.Error().
+			Err(err).
+			Str("body", string(c.Body())).
+			Msg("failed to parse registration form data")
+
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid form data",
 		})
 	}
 
+	// Log parsed data before validation
+	reqLogger.Debug().
+		Str("name", data.Name).
+		Str("email", data.Email).
+		Str("initials", data.Initials).
+		Int("facility_id", data.Facility).
+		Msg("validating registration data")
+
 	// Validate form data
 	if errors := h.validateRegistration(&data); len(errors) > 0 {
+		reqLogger.Warn().
+			Interface("validation_errors", errors).
+			Interface("form_data", data).
+			Msg("registration validation failed")
+
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"errors": errors,
 		})
@@ -146,13 +173,21 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 		"SELECT EXISTS(SELECT 1 FROM controllers WHERE email = $1)",
 		data.Email).Scan(&exists)
 	if err != nil {
-		h.logger.Error().Err(err).Msg("Database error checking email existence")
+		reqLogger.Error().
+			Err(err).
+			Str("email", data.Email).
+			Msg("database error checking email existence")
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Server error",
 		})
 	}
 
 	if exists {
+		reqLogger.Info().
+			Str("email", data.Email).
+			Msg("registration attempted with existing email")
+
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"errors": []ValidationError{{
 				Field:   "email",
@@ -164,7 +199,10 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
 	if err != nil {
-		h.logger.Error().Err(err).Msg("Failed to hash password")
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to hash password")
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Server error",
 		})
@@ -173,7 +211,10 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 	// Get a connection from the pool for the transaction
 	conn, err := h.db.GetPool().Acquire(context.Background())
 	if err != nil {
-		h.logger.Error().Err(err).Msg("Failed to acquire connection")
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to acquire database connection")
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Server error",
 		})
@@ -183,7 +224,10 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 	// Start transaction
 	tx, err := conn.Begin(context.Background())
 	if err != nil {
-		h.logger.Error().Err(err).Msg("Failed to start transaction")
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to start transaction")
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Server error",
 		})
@@ -193,12 +237,21 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 	// Insert new controller
 	var controllerID int
 	err = tx.QueryRow(context.Background(),
-		`INSERT INTO controllers (name, email, initials, password, facility_id) 
-		 VALUES ($1, $2, $3, $4, $5) 
+		`INSERT INTO controllers (name, email, initials, password, facility_id, role) 
+		 VALUES ($1, $2, $3, $4, $5, $6) 
 		 RETURNING id`,
-		data.Name, data.Email, data.Initials, hashedPassword, data.Facility).Scan(&controllerID)
+		data.Name, data.Email, data.Initials, hashedPassword, data.Facility, data.Role).Scan(&controllerID)
 	if err != nil {
-		h.logger.Error().Err(err).Msg("Failed to insert new controller")
+		reqLogger.Error().
+			Err(err).
+			Interface("controller_data", map[string]interface{}{
+				"name":        data.Name,
+				"email":       data.Email,
+				"initials":    data.Initials,
+				"facility_id": data.Facility,
+			}).
+			Msg("failed to insert new controller")
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to create account",
 		})
@@ -206,24 +259,40 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 
 	// Commit transaction
 	if err = tx.Commit(context.Background()); err != nil {
-		h.logger.Error().Err(err).Msg("Failed to commit transaction")
+		reqLogger.Error().
+			Err(err).
+			Int("controller_id", controllerID).
+			Msg("failed to commit transaction")
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Server error",
 		})
 	}
 
 	// Log successful registration
-	h.logger.Info().
+	reqLogger.Info().
 		Int("controller_id", controllerID).
 		Str("email", data.Email).
+		Str("name", data.Name).
+		Str("initials", data.Initials).
 		Int("facility_id", data.Facility).
-		Msg("New controller registered")
+		Msg("controller registered successfully")
 
 	// Create session and log in the user
 	if err := h.auth.Login(c, controllerID, data.Facility, false); err != nil {
-		h.logger.Error().Err(err).Msg("Failed to create session after registration")
+		reqLogger.Error().
+			Err(err).
+			Int("controller_id", controllerID).
+			Int("facility_id", data.Facility).
+			Msg("failed to create session after registration")
+
 		return c.Redirect("/login", fiber.StatusFound)
 	}
+
+	reqLogger.Info().
+		Int("controller_id", controllerID).
+		Int("facility_id", data.Facility).
+		Msg("user logged in after registration")
 
 	// Redirect to dashboard
 	return c.Redirect("/api/v1/controllers", fiber.StatusFound)
