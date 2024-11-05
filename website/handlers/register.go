@@ -152,6 +152,7 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 		Str("name", data.Name).
 		Str("email", data.Email).
 		Str("initials", data.Initials).
+		Str("role", data.Role).
 		Int("facility_id", data.Facility).
 		Msg("validating registration data")
 
@@ -279,7 +280,7 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 		Msg("controller registered successfully")
 
 	// Create session and log in the user
-	if err := h.auth.Login(c, controllerID, data.Facility, false); err != nil {
+	if err := h.auth.Login(c, controllerID, data.Facility, data.Role); err != nil {
 		reqLogger.Error().
 			Err(err).
 			Int("controller_id", controllerID).

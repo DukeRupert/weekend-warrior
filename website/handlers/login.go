@@ -3,10 +3,7 @@ package handlers
 
 import (
 	"context"
-    "encoding/json"
-    "fmt"
     "time"
-    "github.com/google/uuid"
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/dukerupert/weekend-warrior/middleware"
@@ -41,10 +38,10 @@ func (h *LoginHandler) RegisterRoutes(app *fiber.App) {
 
 // ShowLoginForm displays the login page
 func (h *LoginHandler) ShowLoginForm(c *fiber.Ctx) error {
-	return c.Render("login", fiber.Map{
-		"title": "Login",
-		"error": c.Query("error"),
-	})
+    return c.Render("pages/login", fiber.Map{
+            "title": "Login",
+            "error": c.Query("error"),
+        }, "layouts/base")
 }
 
 // LoginCredentials represents the login form data
@@ -101,35 +98,24 @@ func (h *LoginHandler) HandleLogin(c *fiber.Ctx) error {
         return c.Redirect("/login?error=Invalid+credentials", fiber.StatusFound)
     }
 
-    // Create session with role-based permissions
-    sessionData := SessionData{
-        UserID:     controller.ID,
-        FacilityID: controller.FacilityID,
-        Role:       controller.Role,
-        Name:       controller.Name,
-    }
-
-    // Create a new session
-    session, err := h.createSession(c, sessionData)
-    if err != nil {
+    // Use the auth middleware's Login method instead of creating our own session
+    if err := h.auth.Login(c, controller.ID, controller.FacilityID, controller.Role); err != nil {
         h.logger.Error().
             Err(err).
             Str("email", creds.Email).
-            Interface("sessionData", sessionData). // Log the session data for debugging
+            Int("userID", controller.ID).
+            Int("facilityID", controller.FacilityID).
+            Str("role", controller.Role).
             Msg("Failed to create session")
 
         return c.Redirect("/login?error=Server+error", fiber.StatusFound)
     }
 
-    // Set the session cookie
-    c.Cookie(&fiber.Cookie{
-        Name:     "session_id",
-        Value:    session.ID,
-        Expires:  session.ExpiresAt,
-        HTTPOnly: true,
-        Secure:   true,
-        SameSite: "Lax",
-    })
+    h.logger.Info().
+        Str("email", creds.Email).
+        Int("userID", controller.ID).
+        Str("role", controller.Role).
+        Msg("Login successful")
 
     // Redirect based on role
     redirectURL := h.getRedirectURL(controller.Role)
@@ -138,63 +124,18 @@ func (h *LoginHandler) HandleLogin(c *fiber.Ctx) error {
 
 // HandleLogout processes logout requests
 func (h *LoginHandler) HandleLogout(c *fiber.Ctx) error {
-	if err := h.auth.Logout(c); err != nil {
-		h.logger.Error().
-			Err(err).
-			Msg("Failed to logout")
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to logout",
-		})
-	}
-
-	return c.Redirect("/login", fiber.StatusFound)
-}
-
-func (h *LoginHandler) createSession(c *fiber.Ctx, data SessionData) (*Session, error) {
-    session := Session{
-        ID:        uuid.New().String(),
-        ExpiresAt: time.Now().Add(24 * time.Hour), // 24 hour session
-    }
-
-    // Serialize session data
-    sessionBytes, err := json.Marshal(data)
-    if err != nil {
-        return nil, fmt.Errorf("failed to marshal session data: %w", err)
-    }
-
-    // Store session in database - explicitly convert to []byte
-    _, err = h.db.Exec(context.Background(),
-        `INSERT INTO sessions (id, data, expires_at, user_id, ip_address, user_agent)
-         VALUES ($1, $2::bytea, $3, $4, $5, $6)`,
-        session.ID,
-        sessionBytes,
-        session.ExpiresAt,
-        data.UserID,
-        c.IP(),
-        c.Get("User-Agent"),
-    )
-    if err != nil {
-        h.logger.Error().
-            Err(err).
-            Str("sessionID", session.ID).
-            Int("userID", data.UserID).
-            Msg("Failed to store session in database")
-        return nil, fmt.Errorf("failed to store session: %w", err)
-    }
-
-    return &session, nil
+	return h.auth.Logout(c)
 }
 
 // getRedirectURL returns the appropriate redirect URL based on role
 func (h *LoginHandler) getRedirectURL(role string) string {
     switch role {
     case "super":
-        return "/api/v1/admin/dashboard"
+        return "/app/v1/super/dashboard"
     case "admin":
-        return "/api/v1/facility/dashboard"
+        return "/app/v1/admin/dashboard"
     default:
-        return "/api/v1/dashboard"
+        return "/app/v1/dashboard"
     }
 }
 
