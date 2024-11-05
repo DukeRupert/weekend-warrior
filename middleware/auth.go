@@ -5,8 +5,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -43,17 +45,7 @@ func DefaultSessionOptions() SessionOptions {
 // NewAuthMiddleware creates a new instance of AuthMiddleware
 func NewAuthMiddleware(db *pgxpool.Pool, options SessionOptions) (*AuthMiddleware, error) {
 	// Create session store
-	store := session.New(session.Config{
-		KeyLookup:      "cookie:" + options.CookieName,
-		CookieSecure:   options.CookieSecure,
-		CookieHTTPOnly: options.CookieHTTPOnly,
-		Expiration:     options.Expiration,
-	})
-
-	// Create tables if they don't exist
-	if err := createSessionTable(db); err != nil {
-		return nil, err
-	}
+	store := session.New()
 
 	// Initialize logger
 	logger := log.With().Str("middleware", "auth").Logger()
@@ -66,82 +58,141 @@ func NewAuthMiddleware(db *pgxpool.Pool, options SessionOptions) (*AuthMiddlewar
 	}, nil
 }
 
-// createSessionTable creates the sessions table if it doesn't exist
-func createSessionTable(db *pgxpool.Pool) error {
-	query := `
-		CREATE TABLE IF NOT EXISTS sessions (
-			id VARCHAR(64) PRIMARY KEY,
-			data BYTEA NOT NULL,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-			expires_at TIMESTAMP WITH TIME ZONE NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-	`
-	_, err := db.Exec(context.Background(), query)
-	return err
+// Login creates a new session for authenticated users with logging
+func (am *AuthMiddleware) Login(c *fiber.Ctx, userID int, facilityID int, role models.Role) error {
+	reqLogger := am.logger.With().
+		Str("ip", c.IP()).
+		Str("role", role.String()).
+		Int("user_id", userID).
+		Int("facility_id", facilityID).
+		Logger()
+
+	sess, err := am.store.Get(c)
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Msg("Failed to create session during login")
+		return err
+	}
+
+	// Store user data in session
+	sess.Set("user_id", userID)
+	sess.Set("facility_id", facilityID)
+	sess.Set("role", role.String())
+
+	// Store session in database
+	sessionID := sess.ID()
+	expiresAt := time.Now().Add(am.options.Expiration)
+
+	_, err = am.db.Exec(context.Background(),
+		`INSERT INTO sessions (
+        id,
+        user_id,
+        created_at,
+        expires_at,
+        ip_address,
+        user_agent,
+        is_active
+    ) VALUES ($1, $2, NOW(), $3, $4, $5, true)`,
+		sessionID,
+		sess.Get("user_id"), // Make sure you're storing user_id in your session
+		expiresAt,
+		c.IP(), // Assuming you have access to the Fiber context 'c'
+		c.Get("User-Agent"),
+	)
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Str("session_id", sessionID).
+			Int("user_id", sess.Get("user_id").(int)). // Type assertion needed
+			Str("ip", c.IP()).
+			Msg("Failed to store session in database")
+		return err
+	}
+
+	// Set a new cookie
+	c.Cookie(&fiber.Cookie{
+		Name:     "session_id",
+		Value:    sessionID,
+		Path:     "/",                            // Cookie is valid for all paths
+		Expires:  time.Now().Add(24 * time.Hour), // Expires in 24 hours
+		Secure:   true,                           // Only sent over HTTPS
+		HTTPOnly: true,                           // Not accessible via JavaScript
+		SameSite: "Strict",                       // Strict same-site policy
+	})
+
+	reqLogger.Info().
+		Str("session_id", sessionID).
+		Time("expires_at", expiresAt).
+		Msg("User logged in successfully")
+
+	return nil
 }
 
 // Protected middleware checks if the request has a valid session
 func (am *AuthMiddleware) Protected() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		startTime := time.Now()
-		path := c.Path()
-		method := c.Method()
-
-		// Create logger with request context
 		reqLogger := am.logger.With().
-			Str("path", path).
-			Str("method", method).
 			Str("ip", c.IP()).
-			Str("request_id", c.Get("X-Request-ID")).
+			Str("path", c.Path()).
+			Str("method", c.Method()).
 			Logger()
 
-		sess, err := am.store.Get(c)
+		// Check session ID from cookie
+		sessionID := c.Cookies("session_id")
+		if sessionID == "" {
+			reqLogger.Debug().
+				Msg("No session cookie found, redirecting to login")
+			return c.Redirect("/login")
+		}
+
+		reqLogger.Debug().
+			Str("session_id", sessionID).
+			Msg("Validating session")
+
+		// Validate session in database
+		var userID int
+		var isActive bool
+		err := am.db.QueryRow(context.Background(), `
+       SELECT user_id, is_active 
+       FROM sessions 
+       WHERE id = $1 
+           AND expires_at > NOW() 
+           AND is_active = true`,
+			sessionID,
+		).Scan(&userID, &isActive)
 		if err != nil {
-			reqLogger.Error().
-				Err(err).
-				Msg("Failed to get session")
-
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid session",
-			})
+			if err == pgx.ErrNoRows {
+				reqLogger.Info().
+					Str("session_id", sessionID).
+					Msg("Invalid session ID, redirecting to login")
+			} else {
+				reqLogger.Error().
+					Err(err).
+					Str("session_id", sessionID).
+					Msg("Database error while validating session")
+			}
+			c.ClearCookie("session_id")
+			return c.Redirect("/login")
 		}
 
-		// Check if user data exists in session
-		userID := sess.Get("user_id")
-		if userID == nil {
-			reqLogger.Warn().
-				Msg("No user ID in session, redirecting to login")
-
-			return c.Redirect("/login", fiber.StatusFound)
+		if !isActive {
+			reqLogger.Info().
+				Str("session_id", sessionID).
+				Int("user_id", userID).
+				Msg("Inactive session, redirecting to login")
+			c.ClearCookie("session_id")
+			return c.Redirect("/login")
 		}
 
-		facilityID := sess.Get("facility_id")
-		isAdmin := sess.Get("is_admin")
+		reqLogger.Debug().
+			Str("session_id", sessionID).
+			Int("user_id", userID).
+			Msg("Session validated successfully")
 
-		// Add user data to context for use in handlers
+		// Store user ID in context for route handlers
 		c.Locals("user_id", userID)
-		c.Locals("facility_id", facilityID)
-		c.Locals("is_admin", isAdmin)
-
-		// Process the request
-		err = c.Next()
-
-		// Log the completed request
-		logEvent := reqLogger.Info().
-			Int("user_id", userID.(int)).
-			Int("facility_id", facilityID.(int)).
-			Bool("is_admin", isAdmin.(bool)).
-			Int("status_code", c.Response().StatusCode()).
-			Dur("duration_ms", time.Since(startTime))
-
-		if err != nil {
-			logEvent.Err(err)
-		}
-
-		logEvent.Msg("Protected route accessed")
-
-		return err
+		return c.Next()
 	}
 }
 
@@ -205,58 +256,6 @@ func (am *AuthMiddleware) CleanupSessions() error {
 		Int64("sessions_removed", rowsAffected).
 		Dur("duration_ms", time.Since(startTime)).
 		Msg("Expired sessions cleaned up")
-
-	return nil
-}
-
-// Login creates a new session for authenticated users with logging
-func (am *AuthMiddleware) Login(c *fiber.Ctx, userID int, facilityID int, isAdmin bool) error {
-	reqLogger := am.logger.With().
-		Str("ip", c.IP()).
-		Int("user_id", userID).
-		Int("facility_id", facilityID).
-		Bool("is_admin", isAdmin).
-		Logger()
-
-	sess, err := am.store.Get(c)
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("Failed to create session during login")
-		return err
-	}
-
-	// Store user data in session
-	sess.Set("user_id", userID)
-	sess.Set("facility_id", facilityID)
-	sess.Set("is_admin", isAdmin)
-
-	// Save session
-	if err := sess.Save(); err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("Failed to save session during login")
-		return err
-	}
-
-	// Store session in database
-	sessionID := sess.ID()
-	expiresAt := time.Now().Add(am.options.Expiration)
-
-	_, err = am.db.Exec(context.Background(),
-		"INSERT INTO sessions (id, data, expires_at) VALUES ($1, $2, $3)",
-		sessionID, sess.Get("data"), expiresAt)
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("Failed to store session in database")
-		return err
-	}
-
-	reqLogger.Info().
-		Str("session_id", sessionID).
-		Time("expires_at", expiresAt).
-		Msg("User logged in successfully")
 
 	return nil
 }

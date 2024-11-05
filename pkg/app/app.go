@@ -37,7 +37,7 @@ func New(cfg *config.Config) (*App, error) {
 		log.Error().Err(err).Msg("failed to initialize database service")
 		return nil, fmt.Errorf("unable to initialize database service: %v", err)
 	}
-	
+
 	// Create Fiber instance with config
 	fiberApp := fiber.New(fiber.Config{
 		ReadTimeout:       cfg.Server.ReadTimeout,

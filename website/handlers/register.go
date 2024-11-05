@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dukerupert/weekend-warrior/db"
+	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/dukerupert/weekend-warrior/middleware"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
@@ -22,13 +23,13 @@ type RegisterHandler struct {
 
 // RegistrationData represents the registration form data
 type RegistrationData struct {
-	Name     string `form:"name"`
-	Email    string `form:"email"`
-	Initials string `form:"initials"`
-	Password string `form:"password"`
-	Confirm  string `form:"confirm"`
-	Facility int    `form:"facility"`
-	Role 	 string `form:"role"`
+	Name     string      `form:"name"`
+	Email    string      `form:"email"`
+	Initials string      `form:"initials"`
+	Password string      `form:"password"`
+	Confirm  string      `form:"confirm"`
+	Facility int         `form:"facility"`
+	Role     models.Role `form:"role"`
 }
 
 // ValidationError represents form validation errors
@@ -152,7 +153,7 @@ func (h *RegisterHandler) HandleRegister(c *fiber.Ctx) error {
 		Str("name", data.Name).
 		Str("email", data.Email).
 		Str("initials", data.Initials).
-		Str("role", data.Role).
+		Str("role", data.Role.String()).
 		Int("facility_id", data.Facility).
 		Msg("validating registration data")
 

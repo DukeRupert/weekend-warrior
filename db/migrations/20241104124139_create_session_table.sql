@@ -1,18 +1,16 @@
 -- +goose Up
 -- +goose StatementBegin
 -- Up Migration
-CREATE TABLE IF NOT EXISTS sessions (
-    id VARCHAR(64) PRIMARY KEY,
-    data BYTEA NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    user_id INTEGER,
-    last_accessed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    ip_address INET,
-    user_agent TEXT,
-    
-    CONSTRAINT sessions_expires_check CHECK (expires_at > created_at),
-    CONSTRAINT fk_user
+CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,           -- unique session identifier
+    user_id INTEGER NOT NULL,      -- reference to the authenticated user
+    created_at TIMESTAMP NOT NULL, -- when session was created
+    expires_at TIMESTAMP NOT NULL, -- when session should expire
+    ip_address TEXT,              -- optional: for security tracking
+    user_agent TEXT,              -- optional: for security tracking
+    is_active BOOLEAN DEFAULT true -- optional: for manual invalidation
+        CONSTRAINT sessions_expires_check CHECK (expires_at > created_at),
+        CONSTRAINT fk_user
         FOREIGN KEY (user_id)
         REFERENCES controllers(id)
         ON DELETE CASCADE
@@ -23,9 +21,6 @@ CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
 
 -- Create regular combined index for user lookups
 CREATE INDEX idx_sessions_user ON sessions(user_id, expires_at);
-
--- Create index for last accessed
-CREATE INDEX idx_sessions_last_accessed ON sessions(last_accessed_at);
 
 -- Optional: Create function to clean expired sessions
 CREATE OR REPLACE FUNCTION cleanup_expired_sessions()

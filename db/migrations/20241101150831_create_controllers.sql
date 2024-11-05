@@ -1,6 +1,11 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TYPE controller_role AS ENUM ('admin', 'user', 'super');
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'controller_role') THEN
+        CREATE TYPE controller_role AS ENUM ('admin', 'user', 'super');
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS controllers (
     id SERIAL PRIMARY KEY,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
