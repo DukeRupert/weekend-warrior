@@ -91,6 +91,10 @@ func (a *App) setupHandlers() {
 	calendarHandler := handlers.NewCalendarHandler(a.Calendar)
 
 	// Unprotected Routes
+	auth := app.Group("/auth")
+	auth.Get("/login", h.ShowLoginForm)
+	auth.Post("/login", h.handleLogin)
+	auth.Post("/logout", h.HandleLogout)
 	loginHandler.RegisterRoutes(a.Fiber)
 	registerHandler.RegisterRoutes(a.Fiber)
 

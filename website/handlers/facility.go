@@ -241,15 +241,4 @@ func (h *FacilityHandler) GetFacilityControllers(c *fiber.Ctx) error {
 
 // RegisterRoutes registers all facility routes
 func (h *FacilityHandler) RegisterRoutes(app fiber.Router) {
-	facilities := app.Group("/facilities")
-	// List all facilities
-	facilities.Get("/", h.ListFacilities)
-	// Create new facility endpoint
-	facilities.Post("/", h.CreateFacility)
-	// Create new facility form
-	facilities.Get("/create", h.ShowCreateForm)
-	// Delete facility by ID
-	facilities.Delete("/:id", h.DeleteFacility)
-	// Get controllers at facility
-	facilities.Get("/:code/controllers", h.GetFacilityControllers)
 }
