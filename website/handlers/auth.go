@@ -1,103 +1,175 @@
-// website/handlers/auth.go
+// website/handlers/login.go
 package handlers
 
 import (
-	"errors"
+	"context"
+	"fmt"
+	"time"
 
 	"github.com/dukerupert/weekend-warrior/db"
+	"github.com/dukerupert/weekend-warrior/db/models"
+	"github.com/dukerupert/weekend-warrior/middleware"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// LoginRequest represents the structure of the login request payload
-type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=8"`
+// LoginHandler handles user authentication
+type LoginHandler struct {
+	db     *db.Service
+	auth   *middleware.AuthMiddleware
+	logger zerolog.Logger
 }
 
-// LoginResponse represents the structure of the successful login response
-type LoginResponse struct {
-	Controller struct {
-		ID         uint   `json:"id"`
-		Name       string `json:"name"`
-		Email      string `json:"email"`
-		FacilityID uint   `json:"facility_id"`
-		Role       string `json:"role"`
-	} `json:"controller"`
-}
-
-// Custom errors for authentication
-var (
-	ErrNotFound        = errors.New("record not found")
-	ErrInvalidPassword = errors.New("invalid password")
-)
-
-// checkPassword compares a plaintext password with a hash
-func checkPassword(plaintext, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(plaintext))
-	return err == nil
-}
-
-type AuthHandler struct {
-	dbService *db.Service
-	logger    zerolog.Logger
-}
-
-func NewAuthHandler(dbService *db.Service) *ControllerHandler {
-	return &ControllerHandler{
-		dbService: dbService,
-		logger:    log.With().Str("handler", "controller").Logger(),
+// NewLoginHandler creates a new login handler
+func NewLoginHandler(db *db.Service, auth *middleware.AuthMiddleware) *LoginHandler {
+	return &LoginHandler{
+		db:     db,
+		auth:   auth,
+		logger: log.With().Str("handler", "login").Logger(),
 	}
 }
 
-func (h *AuthHandler) login(c *fiber.Ctx) error {
-	var req LoginRequest
-	if err := c.BodyParser(&req); err != nil {
+// RegisterRoutes registers the login routes
+func (h *LoginHandler) RegisterRoutes(app *fiber.App) {
+	auth := app.Group("/auth")
+	auth.Get("/login", h.ShowLoginForm)
+	auth.Post("/login", h.handleLogin)
+	auth.Post("/logout", h.HandleLogout)
+}
+
+// ShowLoginForm displays the login page
+func (h *LoginHandler) ShowLoginForm(c *fiber.Ctx) error {
+	return c.Render("pages/login", fiber.Map{
+		"title": "Login",
+		"error": c.Query("error"),
+	}, "layouts/base")
+}
+
+// LoginCredentials represents the login form data
+type LoginCredentials struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// loginResponse represents the expected return from a login query
+type aLoginResponse struct {
+	ID         int         `json:"id"`
+	CreatedAt  time.Time   `json:"created_at"`
+	Name       string      `json:"name"`
+	Initials   string      `json:"initials"`
+	Email      string      `json:"email"`
+	Password   string      `json:"password"`
+	FacilityID int         `json:"facility_id"`
+	Role       models.Role `json:"role"`
+	Code       string      `json:"code"`
+}
+
+// SessionData represents the data stored in a session
+type SessionData struct {
+	UserID     int    `json:"user_id"`
+	FacilityID int    `json:"facility_id"`
+	Role       string `json:"role"`
+	Name       string `json:"name"`
+}
+
+// handleLogin processes the login form
+func (h *LoginHandler) handleLogin(c *fiber.Ctx) error {
+	// Check form data
+	var creds LoginCredentials
+	if err := c.BodyParser(&creds); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
+			"error": "Invalid form data",
 		})
 	}
 
-	ctx := c.Context()
-	controller, err := h.dbService.GetControllerByEmail(ctx, req.Email)
+	h.logger.Debug().
+		Str("query", `SELECT id, facility_id, role, password, name 
+    FROM controllers 
+    WHERE email = $1`).
+		Str("email", creds.Email).
+		Msg("Executing SQL query")
+
+		// Check database for user
+
+	var controller aLoginResponse
+	err := h.db.QueryRow(context.Background(),
+		`SELECT * 
+     FROM controllers c
+     JOIN facilities f ON c.facility_id = f.id
+     WHERE c.email = $1;`,
+		creds.Email).Scan(
+		&controller.ID,
+		&controller.CreatedAt,
+		&controller.Name,
+		&controller.Initials,
+		&controller.Email,
+		&controller.Password,
+		&controller.FacilityID,
+		&controller.Role,
+		&controller.Code,
+	)
 	if err != nil {
-		if err == ErrNotFound {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid credentials",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database error",
-		})
+		h.logger.Warn().
+			Err(err).
+			Str("email", creds.Email).
+			Msg("Login attempt failed: user not found")
+		return c.Redirect("/login?error=Invalid+credentials", fiber.StatusFound)
 	}
 
-	if !checkPassword(req.Password, controller.Password) {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid credentials",
-		})
+	// Verify password using bcrypt
+	if err := bcrypt.CompareHashAndPassword([]byte(controller.Password), []byte(creds.Password)); err != nil {
+		h.logger.Warn().
+			Str("email", creds.Email).
+			Msg("Login attempt failed: invalid password")
+
+		return c.Redirect("/login?error=Invalid+credentials", fiber.StatusFound)
 	}
 
-	sess := c.Locals("session").(*session.Session)
-	sess.Set("controller_id", controller.ID)
-	sess.Set("facility_id", controller.FacilityID)
-	sess.Set("role", controller.Role)
+	// Use the auth middleware to create new session
+	if err := h.auth.Login(c, controller.ID, controller.FacilityID, controller.Role); err != nil {
+		h.logger.Error().
+			Err(err).
+			Str("email", creds.Email).
+			Int("userID", controller.ID).
+			Int("facilityID", controller.FacilityID).
+			Str("role", controller.Role.String()).
+			Msg("Failed to create session")
 
-	if err := sess.Save(); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Session error",
-		})
+		return c.Redirect("/login?error=Server+error", fiber.StatusFound)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"controller": map[string]interface{}{
-			"id":          controller.ID,
-			"name":        controller.Name,
-			"email":       controller.Email,
-			"facility_id": controller.FacilityID,
-			"role":        controller.Role,
-		},
-	})
+	h.logger.Info().
+		Str("email", creds.Email).
+		Int("userID", controller.ID).
+		Str("role", controller.Role.String()).
+		Msg("Login successful")
+
+	// Redirect based on role
+	redirectURL := h.getRedirectURL(controller.Role.String(), controller.Code)
+	return c.Redirect(redirectURL, fiber.StatusFound)
+}
+
+// HandleLogout processes logout requests
+func (h *LoginHandler) HandleLogout(c *fiber.Ctx) error {
+	return h.auth.Logout(c)
+}
+
+// getRedirectURL returns the appropriate redirect URL based on role
+func (h *LoginHandler) getRedirectURL(role string, facility string) string {
+	switch role {
+	case "super":
+		return "/app/super/dashboard"
+	case "admin":
+		return fmt.Sprintf("/app/%s/admin/dashboard", facility)
+	default:
+		return fmt.Sprintf("/app/%s/dashboard", facility)
+	}
+}
+
+// Session represents a user session
+type Session struct {
+	ID        string    `json:"id"`
+	ExpiresAt time.Time `json:"expires_at"`
 }

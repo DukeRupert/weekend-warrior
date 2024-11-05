@@ -86,20 +86,39 @@ func (a *App) setupHandlers() {
 	loginHandler := handlers.NewLoginHandler(a.Db, a.Auth)
 	registerHandler := handlers.NewRegisterHandler(a.Db, a.Auth)
 	facilityHandler := handlers.NewFacilityHandler(a.Db)
-	controllersHandler := handlers.NewControllerHandler(a.Db)
-	scheduleHandler := handlers.NewScheduleHandler(a.Db)
+	// controllersHandler := handlers.NewControllerHandler(a.Db)
+	// scheduleHandler := handlers.NewScheduleHandler(a.Db)
 	calendarHandler := handlers.NewCalendarHandler(a.Calendar)
 
 	// Unprotected Routes
 	loginHandler.RegisterRoutes(a.Fiber)
 	registerHandler.RegisterRoutes(a.Fiber)
 
+	admin := a.Fiber.Group("/admin", a.Auth.Protected(), a.Auth.AdminOnly())
+	admin.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Hello, World! 👋. You must be an admin.")
+	})
+
+	// Protected
+	app := a.Fiber.Group("/app", a.Auth.Protected())
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Hello, World! 👋. You are an authorized user.")
+	})
+	facilities := app.Group("/facilities")
+	// List all facilities
+	facilities.Get("/", facilityHandler.ListFacilities)
+	// Create new facility endpoint
+	facilities.Post("/", facilityHandler.CreateFacility)
+	// Create new facility form
+	facilities.Get("/create", facilityHandler.ShowCreateForm)
+	// Delete facility by ID
+	facilities.Delete("/:id", facilityHandler.DeleteFacility)
+	// Get controllers at facility
+	facilities.Get("/:code/controllers", facilityHandler.GetFacilityControllers)
+
 	// Protected routes
-	v1 := a.Fiber.Group("/app/v1")
-	v1.Use(a.Auth.Protected()) // Protect all routes under /app
-	facilityHandler.RegisterRoutes(v1)
-	controllersHandler.RegisterRoutes(a.Fiber, a.Auth)
-	scheduleHandler.RegisterRoutes(a.Fiber)
+	// controllersHandler.RegisterRoutes(v1)
+	// scheduleHandler.RegisterRoutes(v1)
 
 	// Setup root route
 	a.Fiber.Get("/", calendarHandler.CalendarHandler)
