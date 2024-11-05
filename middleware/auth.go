@@ -5,18 +5,18 @@ import (
 	"context"
 	"time"
 
+	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 // AuthMiddleware contains the dependencies for the auth middleware
 type AuthMiddleware struct {
-	db      *pgxpool.Pool
+	db      *db.Service
 	store   *session.Store
 	options SessionOptions
 	logger  zerolog.Logger
@@ -43,7 +43,7 @@ func DefaultSessionOptions() SessionOptions {
 }
 
 // NewAuthMiddleware creates a new instance of AuthMiddleware
-func NewAuthMiddleware(db *pgxpool.Pool, options SessionOptions) (*AuthMiddleware, error) {
+func NewAuthMiddleware(db *db.Service, options SessionOptions) (*AuthMiddleware, error) {
 	// Create session store
 	store := session.New()
 

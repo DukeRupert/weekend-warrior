@@ -342,7 +342,7 @@ func (h *ScheduleHandler) DeleteSchedule(c *fiber.Ctx) error {
 }
 
 // RegisterRoutes registers all schedule routes
-func (h *ScheduleHandler) RegisterRoutes(app *fiber.App) {
+func (h *ScheduleHandler) RegisterRoutes(app fiber.Router) {
 	schedules := app.Group("api/v1/schedules")
 	// Create new schedule
 	schedules.Post("/", h.CreateSchedule)

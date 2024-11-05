@@ -18,9 +18,10 @@ import (
 
 // App holds all dependencies for our application
 type App struct {
-	DB       *db.Service
+	Db       *db.Service
 	Fiber    *fiber.App
 	Config   *config.Config
+	Auth     *middleware.AuthMiddleware
 	Calendar *calendar.Service
 }
 
@@ -39,7 +40,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	// Create Fiber instance with config
-	fiberApp := fiber.New(fiber.Config{
+	app := fiber.New(fiber.Config{
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
 		Views:             html.New("./website/views", ".html"),
@@ -47,15 +48,23 @@ func New(cfg *config.Config) (*App, error) {
 	})
 
 	// Add logger middleware
-	fiberApp.Use(middleware.Logger())
+	app.Use(middleware.Logger())
+
+	// Initialize auth middleware with default options
+	authMiddleware, err := middleware.NewAuthMiddleware(dbService, middleware.DefaultSessionOptions())
+	if err != nil {
+		log.Error().Err(err).Msg("failed to initialize auth middleware")
+		fmt.Errorf("unable to initialize auth middleware: %v", err)
+	}
 
 	// Initialize calendar service with the DB pool
 	calendarService := calendar.NewService(dbService.GetPool())
 
 	return &App{
-		DB:       dbService,
-		Fiber:    fiberApp,
+		Db:       dbService,
+		Fiber:    app,
 		Config:   cfg,
+		Auth:     authMiddleware,
 		Calendar: calendarService,
 	}, nil
 }
@@ -64,7 +73,7 @@ func New(cfg *config.Config) (*App, error) {
 func (a *App) Setup() {
 	// Store DB pool in context for handlers to use
 	a.Fiber.Use(func(c *fiber.Ctx) error {
-		c.Locals("db", a.DB.GetPool())
+		c.Locals("db", a.Db.GetPool())
 		return c.Next()
 	})
 
@@ -74,37 +83,22 @@ func (a *App) Setup() {
 
 // setupHandlers initializes and registers all handlers
 func (a *App) setupHandlers() {
-	// Initialize auth middleware with defeault options
-	authMiddleware, err := middleware.NewAuthMiddleware(a.DB.GetPool(), middleware.DefaultSessionOptions())
-	if err != nil {
-		log.Error().Err(err).Msg("failed to initialize auth middleware")
-		fmt.Errorf("unable to initialize auth middleware: %v", err)
-	}
-
-	// Protected routes
-	api := a.Fiber.Group("/app")
-	api.Use(authMiddleware.Protected()) // Protect all routes under /api
-
-	// Create login handler
-	loginHandler := handlers.NewLoginHandler(a.DB, authMiddleware)
-	loginHandler.RegisterRoutes(a.Fiber)
-
-	// Initialize register handler
-	registerHandler := handlers.NewRegisterHandler(a.DB, authMiddleware)
-	registerHandler.RegisterRoutes(a.Fiber)
-	// Create calendar handler
+	loginHandler := handlers.NewLoginHandler(a.Db, a.Auth)
+	registerHandler := handlers.NewRegisterHandler(a.Db, a.Auth)
+	facilityHandler := handlers.NewFacilityHandler(a.Db)
+	controllersHandler := handlers.NewControllerHandler(a.Db)
+	scheduleHandler := handlers.NewScheduleHandler(a.Db)
 	calendarHandler := handlers.NewCalendarHandler(a.Calendar)
 
-	// Initialize and register facility handler
-	facilityHandler := handlers.NewFacilityHandler(a.DB)
-	facilityHandler.RegisterRoutes(a.Fiber)
+	// Unprotected Routes
+	loginHandler.RegisterRoutes(a.Fiber)
+	registerHandler.RegisterRoutes(a.Fiber)
 
-	// Initialize and register controllers handler
-	controllersHandler := handlers.NewControllerHandler(a.DB)
-	controllersHandler.RegisterRoutes(a.Fiber, authMiddleware)
-
-	// Initialize and register schedule handlers
-	scheduleHandler := handlers.NewScheduleHandler(a.DB)
+	// Protected routes
+	v1 := a.Fiber.Group("/app/v1")
+	v1.Use(a.Auth.Protected()) // Protect all routes under /app
+	facilityHandler.RegisterRoutes(v1)
+	controllersHandler.RegisterRoutes(a.Fiber, a.Auth)
 	scheduleHandler.RegisterRoutes(a.Fiber)
 
 	// Setup root route
@@ -118,7 +112,7 @@ func (a *App) Start() error {
 
 // Cleanup handles graceful shutdown
 func (a *App) Cleanup() {
-	if a.DB != nil {
-		a.DB.Close()
+	if a.Db != nil {
+		a.Db.Close()
 	}
 }

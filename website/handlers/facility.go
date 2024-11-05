@@ -240,8 +240,8 @@ func (h *FacilityHandler) GetFacilityControllers(c *fiber.Ctx) error {
 }
 
 // RegisterRoutes registers all facility routes
-func (h *FacilityHandler) RegisterRoutes(app *fiber.App) {
-	facilities := app.Group("api/v1/facilities")
+func (h *FacilityHandler) RegisterRoutes(app fiber.Router) {
+	facilities := app.Group("/facilities")
 	// List all facilities
 	facilities.Get("/", h.ListFacilities)
 	// Create new facility endpoint

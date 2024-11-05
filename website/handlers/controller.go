@@ -7,7 +7,6 @@ import (
 
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/db/models"
-	"github.com/dukerupert/weekend-warrior/middleware"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -526,8 +525,8 @@ func (h *ControllerHandler) ShowScheduleForm(c *fiber.Ctx) error {
 }
 
 // RegisterRoutes registers all controller routes
-func (h *ControllerHandler) RegisterRoutes(app *fiber.App, auth *middleware.AuthMiddleware) {
-	controllers := app.Group("api/v1/controllers", auth.Protected())
+func (h *ControllerHandler) RegisterRoutes(app fiber.Router) {
+	controllers := app.Group("/controllers")
 
 	// List all controllers
 	controllers.Get("/", h.ListControllers)
