@@ -73,10 +73,75 @@ func (h *FacilityHandler) GetFacilities(c *fiber.Ctx) error {
 		Msg("facilities retrieved successfully")
 
 	return c.Render("pages/super/facilities", fiber.Map{
-		"title": "Facilities",
-		"error": c.Query("error"),
+		"title":      "Facilities",
+		"error":      c.Query("error"),
 		"facilities": facilities,
 	}, "layouts/base", "layouts/app")
+}
+
+// EditFacility returns form to edit a facility
+func (h *FacilityHandler) EditForm(c *fiber.Ctx) error {
+	// Create request-specific logger
+	reqLogger := h.logger.With().
+		Str("method", "EditFacility").
+		Str("request_id", c.GetRespHeader("X-Request-ID")).
+		Logger()
+
+		// Get id parameter as string
+	idStr := c.Params("id")
+	if idStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Missing id parameter",
+		})
+	}
+
+	// Convert to int
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("id_param", idStr).
+			Msg("Invalid id parameter format")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid id format",
+		})
+	}
+
+	// Optional: Check if id is positive
+	if id <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid id value",
+		})
+	}
+
+	log.Debug().
+		Int("id", id).
+		Msg("Successfully parsed facility ID")
+
+	reqLogger.Info().Msg("retrieving facility")
+
+	facility, err := h.dbService.GetFacilityByID(c.Context(), id)
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to retrieve facility")
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to retrieve facility",
+			"detail": err.Error(),
+		})
+	}
+
+	reqLogger.Info().
+		Str("facility code", facility.Code).
+		Msg("facility retrieved successfully")
+
+	return c.Render("pages/super/editForm", fiber.Map{
+		"ID":        facility.Name,
+		"Name":      facility.Name,
+		"CreatedAt": facility.CreatedAt,
+		"Code":      facility.Code,
+	})
 }
 
 // CreateFacility handles POST requests to create a new facility
@@ -254,8 +319,4 @@ func (h *FacilityHandler) GetFacilityControllers(c *fiber.Ctx) error {
 	return c.Render("facilities/create", fiber.Map{
 		"Title": "Facility Controller List",
 	})
-}
-
-// RegisterRoutes registers all facility routes
-func (h *FacilityHandler) RegisterRoutes(app fiber.Router) {
 }

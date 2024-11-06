@@ -111,6 +111,7 @@ func (a *App) setupHandlers() {
 	super.Get("/facilities", facilityHandler.GetFacilities)
 	super.Post("/facilities", facilityHandler.CreateFacility)
 	super.Get("/facilities/create", facilityHandler.CreateForm)
+	super.Get("/facilities/:id/edit", facilityHandler.EditForm)
 
 	admin := a.Fiber.Group("/admin", a.Auth.Protected(), a.Auth.AdminOnly())
 	admin.Get("/", func(c *fiber.Ctx) error {
@@ -140,8 +141,8 @@ func (a *App) setupHandlers() {
 	// View own facility info
 	app.Get("/facility", facilityHandler.GetUserFacility)
 	// Schedule viewing
-	//app.Get("/schedule", GetUserSchedule)
-	//app.Post("/schedule", ToggleAvailability)
+	// app.Get("/schedule", GetUserSchedule)
+	// app.Post("/schedule", ToggleAvailability)
 
 	facilities := app.Group("/facilities")
 	facilities.Get("/", facilityHandler.GetFacilities)

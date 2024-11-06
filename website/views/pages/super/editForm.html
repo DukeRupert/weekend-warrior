@@ -1,0 +1,21 @@
+<tr hx-target="this" hx-swap="outerHTML">
+  <form hx-put="/super/facilities/{{.ID}}" hx-target="this" hx-swap="outerHTML">
+    <td class="whitespace-nowrap border-b border-gray-200 py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6 lg:pl-8">
+      <label for="name" class="sr-only">Facility Name</label>
+      <input id="name" name="name" type="text" value={{.Name}} class="block w-full ring-1 ring-inset ring-gray-300 py-1.5 pl-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" /> 
+    </td>
+              <td class="whitespace-nowrap border-b border-gray-200 px-3 py-4 text-sm text-gray-500">
+      <label for="code" class="sr-only">Facility Code</label>
+      <input id="code" name="code" type="text" value={{.Code}} class="block w-full ring-1 ring-inset ring-gray-300 py-1.5 pl-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" /></td>
+              <td class="whitespace-nowrap border-b border-gray-200 px-3 py-4 text-sm text-gray-500">{{.CreatedAt.Format "2006-01-02"}}</td>
+              <td class="relative whitespace-nowrap border-b border-gray-200 py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-8 lg:pr-8">
+                <div class="mt-6 flex items-center justify-end gap-x-6">
+                  <a href="/super/facilities" class="text-sm/6 font-semibold text-gray-900">Cancel</button>
+                  <button hx-get="/super/facilities/{{.ID}}/edit" class="text-indigo-600 hover:text-indigo-900">
+                    Edit<span class="sr-only">{{.Name}}</span>
+                  </button> 
+                </div>
+              </td>
+  </form>
+</tr>
+
