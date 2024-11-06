@@ -3,7 +3,6 @@ package app
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/logger"
@@ -11,11 +10,9 @@ import (
 	"github.com/dukerupert/weekend-warrior/pkg/config"
 	"github.com/dukerupert/weekend-warrior/services/calendar"
 	"github.com/dukerupert/weekend-warrior/website/handlers"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
-	"github.com/gofiber/storage/postgres/v3"
 	"github.com/gofiber/template/html/v2"
 	"github.com/rs/zerolog/log"
 )
@@ -44,17 +41,6 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("unable to initialize database service: %v", err)
 	}
 
-	// Initialize Session middleware with storage
-	storage := postgres.New(postgres.Config{
-		DB:         db.GetPool(),
-		Table:      "fiber_storage",
-		Reset:      false,
-		GCInterval: 10 * time.Second,
-	})
-	store := session.New(session.Config{
-		Storage: storage,
-	})
-
 	// Create Fiber instance with config
 	app := fiber.New(fiber.Config{
 		ReadTimeout:       cfg.Server.ReadTimeout,
@@ -80,7 +66,6 @@ func New(cfg *config.Config) (*App, error) {
 		Db:       db,
 		Fiber:    app,
 		Config:   cfg,
-		Store:    store,
 		Auth:     authMiddleware,
 		Calendar: calendarService,
 	}, nil
@@ -117,164 +102,6 @@ func (a *App) setupHandlers() {
 	a.Fiber.Get("/login", authHandler.LoginForm)
 	a.Fiber.Post("/login", authHandler.HandleLogin)
 	a.Fiber.Post("/logout", authHandler.HandleLogout)
-
-	// Testing new fiber middleware
-	a.Fiber.Get("/test/protected", func(c *fiber.Ctx) error {
-		log.Info().Msg("Starting protected route middleware check")
-
-		// Authentication middleware
-		sess, err := a.Store.Get(c)
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("path", c.Path()).
-				Msg("Failed to get session")
-			return c.Redirect("/")
-		}
-
-		log.Debug().
-			Str("session_id", sess.ID()).
-			Msg("Session retrieved successfully")
-
-		userID := sess.Get("user_id")
-		if userID == nil {
-			log.Warn().
-				Str("session_id", sess.ID()).
-				Msg("No user_id found in session")
-			return c.Redirect("/")
-		}
-
-		// Log all session values for debugging
-		log.Debug().
-			Interface("user_id", userID).
-			Interface("role", sess.Get("role")).
-			Interface("facility_id", sess.Get("facility_id")).
-			Msg("Session values")
-
-		// Add user info to locals for use in handlers
-		c.Locals("user_id", userID)
-		c.Locals("role", sess.Get("role"))
-		c.Locals("facility_id", sess.Get("facility_id"))
-
-		log.Info().
-			Interface("user_id", userID).
-			Interface("role", sess.Get("role")).
-			Interface("facility_id", sess.Get("facility_id")).
-			Msg("Authentication successful, proceeding to handler")
-
-		return c.Next()
-	}, func(c *fiber.Ctx) error {
-		// Actual route handler
-		log.Info().
-			Str("path", c.Path()).
-			Interface("user_id", c.Locals("user_id")).
-			Interface("role", c.Locals("role")).
-			Msg("Protected route accessed successfully")
-
-		return c.Render("pages/logout", fiber.Map{
-		"title": "Logout",
-		"error": c.Query("error"),
-	}, "layouts/base")
-	})
-
-	a.Fiber.Get("/test/logout", func(c *fiber.Ctx) error {
-		return c.Render("pages/logout", fiber.Map{
-		"title": "Logout",
-		"error": c.Query("error"),
-	}, "layouts/base")
-	})
-
-	a.Fiber.Post("/test/logout", func(c *fiber.Ctx) error {
-		sess, err := a.Store.Get(c)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to get session",
-			})
-		}
-
-		if err := sess.Destroy(); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to destroy session",
-			})
-		}
-
-		return c.Redirect("/test/protected")
-	})
-
-	a.Fiber.Get("/test/login", authHandler.LoginForm)
-
-	a.Fiber.Post("/test/login", func(c *fiber.Ctx) error {
-		// Get session
-		sess, err := a.Store.Get(c)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to get session",
-			})
-		}
-
-		// Parse login request
-		var login struct {
-			Email    string `json:"email"`
-			Password string `json:"password"`
-		}
-
-		if err := c.BodyParser(&login); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid request body",
-			})
-		}
-
-		// ... your database query here ...
-		user, err := db.GetLoginResponse(a.Db, login.Email)
-		if err != nil {
-			return c.Redirect("/test/login?error=Invalid+credentials", fiber.StatusFound)
-		}
-
-		// Verify password
-		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(login.Password)); err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid credentials",
-			})
-		}
-
-		// Store user information in session
-		log.Info().Msg("Starting to set session values")
-
-		sess.Set("user_id", int64(user.ID))
-		log.Debug().
-			Int("user_id", user.ID).
-			Msg("Set user_id in session")
-
-		sess.Set("role", string(user.Role))
-		log.Debug().
-			Str("role", string(user.Role)).
-			Msg("Set role in session")
-
-		sess.Set("facility_id", user.FacilityID)
-		log.Debug().
-			Int("facility_id", user.FacilityID).
-			Msg("Set facility_id in session")
-
-		log.Info().
-			Str("session_id", sess.ID()).
-			Msg("Session saved successfully")
-
-			// Must save before redirect!
-		if err := sess.Save(); err != nil {
-			log.Error().Err(err).Msg("Failed to save session")
-			return err
-		}
-
-		// Redirect based on role
-		switch user.Role {
-		case "super":
-			return c.Redirect("/test/protected")
-		case "admin":
-			return c.Redirect("/test/protected")
-		default:
-			return c.Redirect("/test/protected")
-		}
-	})
 
 	admin := a.Fiber.Group("/admin", a.Auth.Protected(), a.Auth.AdminOnly())
 	admin.Get("/", func(c *fiber.Ctx) error {

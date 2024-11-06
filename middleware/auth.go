@@ -2,22 +2,22 @@
 package middleware
 
 import (
-	"context"
-	"time"
-
+	"fmt"
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
-	"github.com/jackc/pgx/v5"
+	"github.com/gofiber/storage/postgres/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
+	"time"
 )
 
 // AuthMiddleware contains the dependencies for the auth middleware
 type AuthMiddleware struct {
-	db      *db.Service
-	store   *session.Store
+	Db      *db.Service
+	Store   *session.Store
 	options SessionOptions
 	logger  zerolog.Logger
 }
@@ -44,15 +44,24 @@ func DefaultSessionOptions() SessionOptions {
 
 // NewAuthMiddleware creates a new instance of AuthMiddleware
 func NewAuthMiddleware(db *db.Service, options SessionOptions) (*AuthMiddleware, error) {
-	// Create session store
-	store := session.New()
+	// Initialize Session middleware with storage
+	storage := postgres.New(postgres.Config{
+		DB:         db.GetPool(),
+		Table:      "fiber_storage",
+		Reset:      false,
+		GCInterval: 10 * time.Second,
+	})
+
+	store := session.New(session.Config{
+		Storage: storage,
+	})
 
 	// Initialize logger
 	logger := log.With().Str("middleware", "auth").Logger()
 
 	return &AuthMiddleware{
-		db:      db,
-		store:   store,
+		Db:      db,
+		Store:   store,
 		options: options,
 		logger:  logger,
 	}, nil
@@ -60,139 +69,131 @@ func NewAuthMiddleware(db *db.Service, options SessionOptions) (*AuthMiddleware,
 
 // Login creates a new session for authenticated users with logging
 func (am *AuthMiddleware) Login(c *fiber.Ctx, userID int, facilityID int, role models.Role) error {
-	reqLogger := am.logger.With().
-		Str("ip", c.IP()).
-		Str("role", role.String()).
-		Int("user_id", userID).
-		Int("facility_id", facilityID).
-		Logger()
+	// reqLogger := am.logger.With().
+	// 	Str("ip", c.IP()).
+	// 	Str("role", role.String()).
+	// 	Int("user_id", userID).
+	// 	Int("facility_id", facilityID).
+	// 	Logger()
 
-	sess, err := am.store.Get(c)
+	// Get session
+	sess, err := am.Store.Get(c)
 	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("Failed to create session during login")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to get session",
+		})
+	}
+
+	// Parse login request
+	var login struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	if err := c.BodyParser(&login); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// ... your database query here ...
+	user, err := db.GetLoginResponse(am.Db, login.Email)
+	if err != nil {
+		return c.Redirect("/test/login?error=Invalid+credentials", fiber.StatusFound)
+	}
+
+	// Verify password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(login.Password)); err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid credentials",
+		})
+	}
+
+	// Store user information in session
+	log.Info().Msg("Starting to set session values")
+
+	sess.Set("user_id", int64(user.ID))
+	log.Debug().
+		Int("user_id", user.ID).
+		Msg("Set user_id in session")
+
+	sess.Set("role", string(user.Role))
+	log.Debug().
+		Str("role", string(user.Role)).
+		Msg("Set role in session")
+
+	sess.Set("facility_id", user.FacilityID)
+	log.Debug().
+		Int("facility_id", user.FacilityID).
+		Msg("Set facility_id in session")
+
+	log.Info().
+		Str("session_id", sess.ID()).
+		Msg("Session saved successfully")
+
+		// Must save before redirect!
+	if err := sess.Save(); err != nil {
+		log.Error().Err(err).Msg("Failed to save session")
 		return err
 	}
 
-	// Store user data in session
-	sess.Set("user_id", userID)
-	sess.Set("facility_id", facilityID)
-	sess.Set("role", role.String())
-
-	// Store session in database
-	sessionID := sess.ID()
-	expiresAt := time.Now().Add(am.options.Expiration)
-
-	_, err = am.db.Exec(context.Background(),
-		`INSERT INTO sessions (
-        id,
-        user_id,
-        created_at,
-        expires_at,
-        ip_address,
-        user_agent,
-        is_active
-    ) VALUES ($1, $2, NOW(), $3, $4, $5, true)`,
-		sessionID,
-		sess.Get("user_id"), // Make sure you're storing user_id in your session
-		expiresAt,
-		c.IP(), // Assuming you have access to the Fiber context 'c'
-		c.Get("User-Agent"),
-	)
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Str("session_id", sessionID).
-			Int("user_id", sess.Get("user_id").(int)). // Type assertion needed
-			Str("ip", c.IP()).
-			Msg("Failed to store session in database")
-		return err
+	// Redirect based on role
+	switch user.Role {
+	case "super":
+		return c.Redirect("/super/dashboard")
+	case "admin":
+		return c.Redirect(fmt.Sprintf("/app/%d/admin/dashboard", user.FacilityID))
+	default:
+		return c.Redirect(fmt.Sprintf("/app/%d/dashboard", user.FacilityID))
 	}
-
-	// Set a new cookie
-	c.Cookie(&fiber.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Path:     "/",                            // Cookie is valid for all paths
-		Expires:  time.Now().Add(24 * time.Hour), // Expires in 24 hours
-		Secure:   true,                           // Only sent over HTTPS
-		HTTPOnly: true,                           // Not accessible via JavaScript
-		SameSite: "Strict",                       // Strict same-site policy
-	})
-
-	reqLogger.Info().
-		Str("session_id", sessionID).
-		Time("expires_at", expiresAt).
-		Msg("User logged in successfully")
-
-	return nil
 }
 
 // Protected middleware checks if the request has a valid session
 func (am *AuthMiddleware) Protected() fiber.Handler {
-	const loginRedirect string = "/auth/login"
+	const loginRedirect string = "/login"
 	return func(c *fiber.Ctx) error {
-		reqLogger := am.logger.With().
-			Str("ip", c.IP()).
-			Str("path", c.Path()).
-			Str("method", c.Method()).
-			Logger()
+		log.Info().Msg("Starting protected route middleware check")
 
-		// Check session ID from cookie
-		sessionID := c.Cookies("session_id")
-		if sessionID == "" {
-			reqLogger.Debug().
-				Msg("No session cookie found, redirecting to login")
-			return c.Redirect(loginRedirect)
-		}
-
-		reqLogger.Debug().
-			Str("session_id", sessionID).
-			Msg("Validating session")
-
-		// Validate session in database
-		var userID int
-		var isActive bool
-		err := am.db.QueryRow(context.Background(), `
-       SELECT user_id, is_active 
-       FROM sessions 
-       WHERE id = $1 
-           AND expires_at > NOW() 
-           AND is_active = true`,
-			sessionID,
-		).Scan(&userID, &isActive)
+		// Authentication middleware
+		sess, err := am.Store.Get(c)
 		if err != nil {
-			if err == pgx.ErrNoRows {
-				reqLogger.Info().
-					Str("session_id", sessionID).
-					Msg("Invalid session ID, redirecting to login")
-			} else {
-				reqLogger.Error().
-					Err(err).
-					Str("session_id", sessionID).
-					Msg("Database error while validating session")
-			}
-			c.ClearCookie("session_id")
+			log.Error().
+				Err(err).
+				Str("path", c.Path()).
+				Msg("Failed to get session")
 			return c.Redirect(loginRedirect)
 		}
 
-		if !isActive {
-			reqLogger.Info().
-				Str("session_id", sessionID).
-				Int("user_id", userID).
-				Msg("Inactive session, redirecting to login")
-			c.ClearCookie("session_id")
+		log.Debug().
+			Str("session_id", sess.ID()).
+			Msg("Session retrieved successfully")
+
+		userID := sess.Get("user_id")
+		if userID == nil {
+			log.Warn().
+				Str("session_id", sess.ID()).
+				Msg("No user_id found in session")
 			return c.Redirect(loginRedirect)
 		}
 
-		reqLogger.Debug().
-			Str("session_id", sessionID).
-			Int("user_id", userID).
-			Msg("Session validated successfully")
+		// Log all session values for debugging
+		log.Debug().
+			Interface("user_id", userID).
+			Interface("role", sess.Get("role")).
+			Interface("facility_id", sess.Get("facility_id")).
+			Msg("Session values")
 
-		// Store user ID in context for route handlers
+		// Add user info to locals for use in handlers
 		c.Locals("user_id", userID)
+		c.Locals("role", sess.Get("role"))
+		c.Locals("facility_id", sess.Get("facility_id"))
+
+		log.Info().
+			Interface("user_id", userID).
+			Interface("role", sess.Get("role")).
+			Interface("facility_id", sess.Get("facility_id")).
+			Msg("Authentication successful, proceeding to handler")
+
 		return c.Next()
 	}
 }
@@ -207,7 +208,7 @@ func (am *AuthMiddleware) AdminOnly() fiber.Handler {
 			Str("request_id", c.Get("X-Request-ID")).
 			Logger()
 
-		sess, err := am.store.Get(c)
+		sess, err := am.Store.Get(c)
 		if err != nil {
 			reqLogger.Error().
 				Err(err).
@@ -223,11 +224,11 @@ func (am *AuthMiddleware) AdminOnly() fiber.Handler {
 
 		if role == "admin" || role == "super" {
 			reqLogger.Info().
-			Interface("user_id", userID).
-			Msg("Admin route accessed")
+				Interface("user_id", userID).
+				Msg("Admin route accessed")
 
 			return c.Next()
-			
+
 		}
 
 		reqLogger.Warn().
@@ -240,65 +241,20 @@ func (am *AuthMiddleware) AdminOnly() fiber.Handler {
 	}
 }
 
-// CleanupSessions removes expired sessions from the database with logging
-func (am *AuthMiddleware) CleanupSessions() error {
-	startTime := time.Now()
-
-	result, err := am.db.Exec(context.Background(),
-		"DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP")
-	if err != nil {
-		am.logger.Error().
-			Err(err).
-			Msg("Failed to cleanup expired sessions")
-		return err
-	}
-
-	rowsAffected := result.RowsAffected()
-	am.logger.Info().
-		Int64("sessions_removed", rowsAffected).
-		Dur("duration_ms", time.Since(startTime)).
-		Msg("Expired sessions cleaned up")
-
-	return nil
-}
-
 // Logout removes the session with logging
 func (am *AuthMiddleware) Logout(c *fiber.Ctx) error {
-	sess, err := am.store.Get(c)
+	sess, err := am.Store.Get(c)
 	if err != nil {
-		am.logger.Error().
-			Err(err).
-			Str("ip", c.IP()).
-			Msg("Failed to get session during logout")
-		return err
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to get session",
+		})
 	}
 
-	userID := sess.Get("user_id")
-	sessionID := sess.ID()
-
-	reqLogger := am.logger.With().
-		Str("ip", c.IP()).
-		Str("session_id", sessionID).
-		Interface("user_id", userID).
-		Logger()
-
-	// Delete session from database
-	_, err = am.db.Exec(context.Background(), "DELETE FROM sessions WHERE id = $1", sessionID)
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("Failed to delete session from database during logout")
-		return err
-	}
-
-	// Destroy session
 	if err := sess.Destroy(); err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("Failed to destroy session during logout")
-		return err
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to destroy session",
+		})
 	}
 
-	reqLogger.Info().Msg("User logged out successfully")
-	return nil
+	return c.Redirect("/auth/login")
 }
