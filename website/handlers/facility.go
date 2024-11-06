@@ -177,8 +177,11 @@ func (h *FacilityHandler) Create(c *fiber.Ctx) error {
 		Str("code", facility.Code).
 		Msg("facility created successfully")
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message": "Success",
+	return c.Status(fiber.StatusOK).Render("pages/super/facilities/listItem", fiber.Map{
+		"ID":        facility.Name,
+		"Name":      facility.Name,
+		"CreatedAt": facility.CreatedAt,
+		"Code":      facility.Code,
 	})
 }
 
@@ -381,10 +384,10 @@ func (h *FacilityHandler) Delete(c *fiber.Ctx) error {
 
 // CreateForm renders the facility creation form
 func (h *FacilityHandler) CreateForm(c *fiber.Ctx) error {
-	return c.Render("pages/super/createFacility", fiber.Map{
-		"title": "Create New Facility",
-		"error": c.Query("error"),
-	}, "layouts/app", "layouts/base")
+	return c.Render("pages/super/facilities/createForm", fiber.Map{
+		"Name": "Lothlorien TRACON",
+		"Code": "LOTH",
+	})
 }
 
 // UpdateForm returns form to edit a facility
