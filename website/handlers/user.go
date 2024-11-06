@@ -1,181 +1,231 @@
-// handlers/controllers.go
+// website/handlers/handler.go
+// Handle standard user interactions
 package handlers
 
 import (
 	"fmt"
+	"strings"
 	"strconv"
+	"context"
+	"regexp"
 
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
-type ControllerHandler struct {
-	dbService *db.Service
-	logger    zerolog.Logger
+type UserHandler struct {
+	Db *db.Service
+	Logger    zerolog.Logger
 }
 
-func NewControllerHandler(dbService *db.Service) *ControllerHandler {
-	return &ControllerHandler{
-		dbService: dbService,
-		logger:    log.With().Str("handler", "controller").Logger(),
+func NewUserHandler(db *db.Service) *UserHandler {
+	return &UserHandler{
+		Db: db,
+		Logger:    log.With().Str("handler", "user").Logger(),
 	}
 }
 
-// ListControllers handles GET requests to list all controllers
-func (h *ControllerHandler) ListControllers(c *fiber.Ctx) error {
-	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "ListControllers").
-		Str("request_id", c.GetRespHeader("X-Request-ID")).
-		Logger()
+// CreateData represents the registration form data
+type CreateData struct {
+	Name     string      `form:"name"`
+	Email    string      `form:"email"`
+	Initials string      `form:"initials"`
+	Password string      `form:"password"`
+	Confirm  string      `form:"confirm"`
+	Facility int         `form:"facility"`
+	Role     models.Role `form:"role"`
+}
 
-	reqLogger.Info().Msg("retrieving controllers list")
-
-	controllers, err := h.dbService.ListControllers(c.Context())
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("failed to retrieve controllers")
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to retrieve controllers",
-			"detail": err.Error(),
-		})
-	}
-
-	reqLogger.Info().
-		Int("controller_count", len(controllers)).
-		Msg("controllers retrieved successfully")
-
-	return c.JSON(fiber.Map{
-		"data": controllers,
-	})
+// ValidationError represents form validation errors
+type ValidationError struct {
+	Field   string
+	Message string
 }
 
 // CreateController handles POST requests to create a new controller
-func (h *ControllerHandler) CreateController(c *fiber.Ctx) error {
+func (h *UserHandler) Create(c *fiber.Ctx) error {
 	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "CreateController").
+	reqLogger := h.Logger.With().
+		Str("method", "HandleRegister").
 		Str("request_id", c.GetRespHeader("X-Request-ID")).
 		Logger()
 
-	reqLogger.Info().Msg("processing create controller request")
+	reqLogger.Info().Msg("processing registration request")
 
-	var params models.CreateControllerParams
-	if err := c.BodyParser(&params); err != nil {
+	var data CreateData
+	if err := c.BodyParser(&data); err != nil {
 		reqLogger.Error().
 			Err(err).
 			Str("body", string(c.Body())).
-			Msg("failed to parse request body")
+			Msg("failed to parse registration form data")
 
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid request body",
-			"detail": err.Error(),
+			"error": "Invalid form data",
 		})
 	}
 
-	// Validation logging with detailed context
-	if params.Name == "" {
-		reqLogger.Error().
-			Interface("params", params).
-			Msg("validation failed: name is required")
-
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid request",
-			"detail": "name is required",
-		})
-	}
-
-	if len(params.Initials) != 2 {
-		reqLogger.Error().
-			Str("initials", params.Initials).
-			Interface("params", params).
-			Msg("validation failed: invalid initials length")
-
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid request",
-			"detail": "initials must be exactly 2 characters",
-		})
-	}
-
-	if params.Email == "" {
-		reqLogger.Error().
-			Interface("params", params).
-			Msg("validation failed: email is required")
-
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid request",
-			"detail": "email is required",
-		})
-	}
-
-	if params.FacilityID <= 0 {
-		reqLogger.Error().
-			Int("facility_id", params.FacilityID).
-			Interface("params", params).
-			Msg("validation failed: invalid facility ID")
-
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid request",
-			"detail": "facility_id must be a positive number",
-		})
-	}
-
-	// Log validated parameters before database operation
+	// Log parsed data before validation
 	reqLogger.Debug().
-		Str("name", params.Name).
-		Str("initials", params.Initials).
-		Str("email", params.Email).
-		Int("facility_id", params.FacilityID).
-		Msg("attempting to create controller")
+		Str("name", data.Name).
+		Str("email", data.Email).
+		Str("initials", data.Initials).
+		Str("role", data.Role.String()).
+		Int("facility_id", data.Facility).
+		Msg("validating registration data")
 
-	controller, err := h.dbService.CreateController(c.Context(), params)
+	// Validate form data
+	if errors := h.validateCreate(&data); len(errors) > 0 {
+		reqLogger.Warn().
+			Interface("validation_errors", errors).
+			Interface("form_data", data).
+			Msg("registration validation failed")
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"errors": errors,
+		})
+	}
+
+	// Check if email already exists
+	var exists bool
+	err := h.Db.QueryRow(context.Background(),
+		"SELECT EXISTS(SELECT 1 FROM controllers WHERE email = $1)",
+		data.Email).Scan(&exists)
 	if err != nil {
-		if isDuplicateKeyError(err) {
-			reqLogger.Warn().
-				Err(err).
-				Str("email", params.Email).
-				Str("initials", params.Initials).
-				Int("facility_id", params.FacilityID).
-				Msg("duplicate controller detected")
-
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error":  "Controller already exists",
-				"detail": "Email or initials already in use at this facility",
-			})
-		}
-
 		reqLogger.Error().
 			Err(err).
-			Interface("params", params).
-			Msg("failed to create controller")
+			Str("email", data.Email).
+			Msg("database error checking email existence")
 
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to create controller",
-			"detail": err.Error(),
+			"error": "Server error",
 		})
 	}
 
+	if exists {
+		reqLogger.Info().
+			Str("email", data.Email).
+			Msg("registration attempted with existing email")
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"errors": []ValidationError{{
+				Field:   "email",
+				Message: "Email already registered",
+			}},
+		})
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to hash password")
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Server error",
+		})
+	}
+
+	// Insert new controller
+	var controllerID int
+	err = h.Db.QueryRow(context.Background(),
+		`INSERT INTO controllers (name, email, initials, password, facility_id, role) 
+		 VALUES ($1, $2, $3, $4, $5, $6) 
+		 RETURNING id`,
+		data.Name, data.Email, data.Initials, hashedPassword, data.Facility, data.Role).Scan(&controllerID)
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Interface("controller_data", map[string]interface{}{
+				"name":        data.Name,
+				"email":       data.Email,
+				"initials":    data.Initials,
+				"facility_id": data.Facility,
+			}).
+			Msg("failed to insert new controller")
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to create account",
+		})
+	}
+
+	// Log successful registration
 	reqLogger.Info().
-		Int("controller_id", controller.ID).
-		Str("name", controller.Name).
-		Str("email", controller.Email).
-		Int("facility_id", controller.FacilityID).
-		Msg("controller created successfully")
+		Int("controller_id", controllerID).
+		Str("email", data.Email).
+		Str("name", data.Name).
+		Str("initials", data.Initials).
+		Int("facility_id", data.Facility).
+		Msg("controller registered successfully")
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"data": controller,
+		"success": true,
 	})
 }
 
+// validateRegistration validates the registration data
+func (h *UserHandler) validateCreate(data *CreateData) []ValidationError {
+	var errors []ValidationError
+
+	// Validate name
+	if strings.TrimSpace(data.Name) == "" {
+		errors = append(errors, ValidationError{
+			Field:   "name",
+			Message: "Name is required",
+		})
+	}
+
+	// Validate email
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	if !emailRegex.MatchString(data.Email) {
+		errors = append(errors, ValidationError{
+			Field:   "email",
+			Message: "Invalid email address",
+		})
+	}
+
+	// Validate initials
+	if len(data.Initials) < 2 || len(data.Initials) > 3 {
+		errors = append(errors, ValidationError{
+			Field:   "initials",
+			Message: "Initials must be 2-3 characters",
+		})
+	}
+
+	// Validate password
+	if len(data.Password) < 8 {
+		errors = append(errors, ValidationError{
+			Field:   "password",
+			Message: "Password must be at least 8 characters",
+		})
+	}
+
+	if data.Password != data.Confirm {
+		errors = append(errors, ValidationError{
+			Field:   "confirm",
+			Message: "Passwords do not match",
+		})
+	}
+
+	// Validate facility
+	if data.Facility <= 0 {
+		errors = append(errors, ValidationError{
+			Field:   "facility",
+			Message: "Please select a facility",
+		})
+	}
+
+	return errors
+}
+
 // UpdateController handles PUT requests to update a controller
-func (h *ControllerHandler) UpdateController(c *fiber.Ctx) error {
+func (h *UserHandler) Update(c *fiber.Ctx) error {
 	// Create request-specific logger
-	reqLogger := h.logger.With().
+	reqLogger := h.Logger.With().
 		Str("method", "UpdateController").
 		Str("request_id", c.GetRespHeader("X-Request-ID")).
 		Logger()
@@ -220,7 +270,7 @@ func (h *ControllerHandler) UpdateController(c *fiber.Ctx) error {
 		Msg("attempting to update controller")
 
 	// Perform update
-	controller, err := h.dbService.UpdateController(c.Context(), id, params)
+	controller, err := h.Db.UpdateController(c.Context(), id, params)
 	if err != nil {
 		if isDuplicateKeyError(err) {
 			reqLogger.Warn().
@@ -263,9 +313,9 @@ func (h *ControllerHandler) UpdateController(c *fiber.Ctx) error {
 }
 
 // DeleteController handles DELETE requests to delete a controller
-func (h *ControllerHandler) DeleteController(c *fiber.Ctx) error {
+func (h *UserHandler) Delete(c *fiber.Ctx) error {
 	// Create request-specific logger
-	reqLogger := h.logger.With().
+	reqLogger := h.Logger.With().
 		Str("method", "DeleteController").
 		Str("request_id", c.GetRespHeader("X-Request-ID")).
 		Logger()
@@ -290,7 +340,7 @@ func (h *ControllerHandler) DeleteController(c *fiber.Ctx) error {
 		Int("controller_id", id).
 		Msg("attempting to delete controller")
 
-	err = h.dbService.DeleteController(c.Context(), id)
+	err = h.Db.DeleteController(c.Context(), id)
 	if err != nil {
 		if isNotFoundError(err) {
 			reqLogger.Warn().
@@ -321,47 +371,60 @@ func (h *ControllerHandler) DeleteController(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
 
-// ShowCreateForm renders the controller creation form
-func (h *ControllerHandler) ShowCreateForm(c *fiber.Ctx) error {
+// ListControllers handles GET requests to list all controllers
+func (h *UserHandler) List(c *fiber.Ctx) error {
 	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "ShowCreateForm").
+	reqLogger := h.Logger.With().
+		Str("method", "ListControllers").
 		Str("request_id", c.GetRespHeader("X-Request-ID")).
 		Logger()
 
-	reqLogger.Info().
-		Str("template", "controllers/manage").
-		Str("title", "Create New Controller").
-		Bool("edit_mode", false).
-		Msg("rendering controller creation form")
+	reqLogger.Info().Msg("retrieving controllers list")
 
-	err := c.Render("controllers/manage", fiber.Map{
-		"Title":      "Create New Controller",
-		"EditMode":   false,
-		"Controller": nil,
-	})
+	controllers, err := h.Db.ListControllers(c.Context())
 	if err != nil {
 		reqLogger.Error().
 			Err(err).
-			Str("template", "controllers/manage").
-			Msg("failed to render controller creation form")
+			Msg("failed to retrieve controllers")
 
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to render form",
+			"error":  "Failed to retrieve controllers",
 			"detail": err.Error(),
 		})
 	}
 
-	reqLogger.Debug().Msg("controller creation form rendered successfully")
+	reqLogger.Info().
+		Int("controller_count", len(controllers)).
+		Msg("controllers retrieved successfully")
 
-	return nil
+	return c.JSON(fiber.Map{
+		"data": controllers,
+	})
 }
 
-// ShowEditForm renders the controller edit form with preloaded data
-func (h *ControllerHandler) ShowEditForm(c *fiber.Ctx) error {
+// CreateForm displays the registration page
+func (h *UserHandler) CreateForm(c *fiber.Ctx) error {
+	// Fetch facilities for the dropdown
+	facilities, err := h.Db.ListFacilities(context.Background())
+	if err != nil {
+		h.Logger.Error().Err(err).Msg("Failed to fetch facilities")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Server error",
+		})
+	}
+
+	return c.Render("register", fiber.Map{
+		"title":      "Register",
+		"error":      c.Query("error"),
+		"facilities": facilities,
+	})
+}
+
+// UpdateForm renders the controller edit form with preloaded data
+func (h *UserHandler) UpdateForm(c *fiber.Ctx) error {
 	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "ShowEditForm").
+	reqLogger := h.Logger.With().
+		Str("method", "EditForm").
 		Str("request_id", c.GetRespHeader("X-Request-ID")).
 		Logger()
 
@@ -388,7 +451,7 @@ func (h *ControllerHandler) ShowEditForm(c *fiber.Ctx) error {
 		Msg("fetching controller data for edit form")
 
 	// Fetch the controller data
-	controller, err := h.dbService.GetControllerByID(c.Context(), id)
+	controller, err := h.Db.GetControllerByID(c.Context(), id)
 	if err != nil {
 		if isNotFoundError(err) {
 			reqLogger.Warn().
@@ -445,11 +508,11 @@ func (h *ControllerHandler) ShowEditForm(c *fiber.Ctx) error {
 	return nil
 }
 
-// ShowScheduleForm renders the controller schedule form
-func (h *ControllerHandler) ShowScheduleForm(c *fiber.Ctx) error {
+// ScheduleForm renders the controller schedule form
+func (h *UserHandler) ScheduleForm(c *fiber.Ctx) error {
 	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "ShowScheduleForm").
+	reqLogger := h.Logger.With().
+		Str("method", "ScheduleForm").
 		Str("request_id", c.GetRespHeader("X-Request-ID")).
 		Logger()
 
@@ -478,7 +541,7 @@ func (h *ControllerHandler) ShowScheduleForm(c *fiber.Ctx) error {
 		Msg("fetching controller data for edit form")
 
 	// Fetch the controller data
-	controller, err := h.dbService.GetControllerByID(c.Context(), id)
+	controller, err := h.Db.GetControllerByID(c.Context(), id)
 	if err != nil {
 		if isNotFoundError(err) {
 			reqLogger.Warn().
@@ -522,24 +585,4 @@ func (h *ControllerHandler) ShowScheduleForm(c *fiber.Ctx) error {
 	reqLogger.Debug().Msg("controller schedule form rendered successfully")
 
 	return nil
-}
-
-// RegisterRoutes registers all controller routes
-func (h *ControllerHandler) RegisterRoutes(app fiber.Router) {
-	controllers := app.Group("/controllers")
-
-	// List all controllers
-	controllers.Get("/", h.ListControllers)
-	controllers.Post("/", h.CreateController)
-	controllers.Put("/:id", h.UpdateController)
-	controllers.Delete("/:id", h.DeleteController)
-
-	// Create new controller
-	controllers.Get("/new", h.ShowCreateForm)
-
-	// Update existing controller
-	controllers.Get("/edit/:id", h.ShowEditForm)
-
-	// Assign schedule to controller
-	controllers.Get("/schedule/:id", h.ShowScheduleForm)
 }

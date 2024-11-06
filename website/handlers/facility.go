@@ -32,8 +32,22 @@ type CreateFacilityRequest struct {
 	Code string `json:"code"`
 }
 
-// ListFacilities handles GET requests to list all facilities
-func (h *FacilityHandler) ListFacilities(c *fiber.Ctx) error {
+func (h *FacilityHandler) GetUserFacility(c *fiber.Ctx) error {
+	// Create request-specific logger
+	reqLogger := h.logger.With().
+		Str("method", "GetUserFacility").
+		Str("request_id", c.GetRespHeader("X-Request-ID")).
+		Logger()
+
+	reqLogger.Info().Msg("retrieving user facility")
+
+	return c.JSON(fiber.Map{
+		"data": "Under construction",
+	})
+}
+
+// GetFacilities handles GET requests to list all facilities
+func (h *FacilityHandler) GetFacilities(c *fiber.Ctx) error {
 	// Create request-specific logger
 	reqLogger := h.logger.With().
 		Str("method", "ListFacilities").
@@ -225,8 +239,8 @@ func (h *FacilityHandler) DeleteFacility(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
 
-// ShowCreateForm renders the facility creation form
-func (h *FacilityHandler) ShowCreateForm(c *fiber.Ctx) error {
+// CreateForm renders the facility creation form
+func (h *FacilityHandler) CreateForm(c *fiber.Ctx) error {
 	return c.Render("facilities/create", fiber.Map{
 		"Title": "Create New Facility",
 	})

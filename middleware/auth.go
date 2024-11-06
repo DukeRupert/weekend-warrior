@@ -131,6 +131,7 @@ func (am *AuthMiddleware) Login(c *fiber.Ctx, userID int, facilityID int, role m
 
 // Protected middleware checks if the request has a valid session
 func (am *AuthMiddleware) Protected() fiber.Handler {
+	const loginRedirect string = "/auth/login"
 	return func(c *fiber.Ctx) error {
 		reqLogger := am.logger.With().
 			Str("ip", c.IP()).
@@ -143,7 +144,7 @@ func (am *AuthMiddleware) Protected() fiber.Handler {
 		if sessionID == "" {
 			reqLogger.Debug().
 				Msg("No session cookie found, redirecting to login")
-			return c.Redirect("/login")
+			return c.Redirect(loginRedirect)
 		}
 
 		reqLogger.Debug().
@@ -173,7 +174,7 @@ func (am *AuthMiddleware) Protected() fiber.Handler {
 					Msg("Database error while validating session")
 			}
 			c.ClearCookie("session_id")
-			return c.Redirect("/login")
+			return c.Redirect(loginRedirect)
 		}
 
 		if !isActive {
@@ -182,7 +183,7 @@ func (am *AuthMiddleware) Protected() fiber.Handler {
 				Int("user_id", userID).
 				Msg("Inactive session, redirecting to login")
 			c.ClearCookie("session_id")
-			return c.Redirect("/login")
+			return c.Redirect(loginRedirect)
 		}
 
 		reqLogger.Debug().
@@ -217,24 +218,25 @@ func (am *AuthMiddleware) AdminOnly() fiber.Handler {
 			})
 		}
 
-		isAdmin := sess.Get("is_admin")
 		userID := sess.Get("user_id")
+		role := sess.Get("role")
 
-		if isAdmin == nil || !isAdmin.(bool) {
-			reqLogger.Warn().
-				Interface("user_id", userID).
-				Msg("Non-admin user attempted to access admin route")
-
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Admin access required",
-			})
-		}
-
-		reqLogger.Info().
+		if role == "admin" || role == "super" {
+			reqLogger.Info().
 			Interface("user_id", userID).
 			Msg("Admin route accessed")
 
-		return c.Next()
+			return c.Next()
+			
+		}
+
+		reqLogger.Warn().
+			Interface("user_id", userID).
+			Msg("Non-admin user attempted to access admin route")
+
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Admin access required",
+		})
 	}
 }
 

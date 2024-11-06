@@ -2,12 +2,10 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/dukerupert/weekend-warrior/db"
-	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/dukerupert/weekend-warrior/middleware"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
@@ -15,55 +13,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// LoginHandler handles user authentication
-type LoginHandler struct {
+// AuthHandler handles user authentication
+type AuthHandler struct {
 	db     *db.Service
 	auth   *middleware.AuthMiddleware
 	logger zerolog.Logger
 }
 
-// NewLoginHandler creates a new login handler
-func NewLoginHandler(db *db.Service, auth *middleware.AuthMiddleware) *LoginHandler {
-	return &LoginHandler{
+// NewAuthHandler creates a new login handler
+func NewAuthHandler(db *db.Service, auth *middleware.AuthMiddleware) *AuthHandler {
+	return &AuthHandler{
 		db:     db,
 		auth:   auth,
 		logger: log.With().Str("handler", "login").Logger(),
 	}
 }
 
-// RegisterRoutes registers the login routes
-func (h *LoginHandler) RegisterRoutes(app *fiber.App) {
-	auth := app.Group("/auth")
-	auth.Get("/login", h.ShowLoginForm)
-	auth.Post("/login", h.handleLogin)
-	auth.Post("/logout", h.HandleLogout)
-}
-
-// ShowLoginForm displays the login page
-func (h *LoginHandler) ShowLoginForm(c *fiber.Ctx) error {
-	return c.Render("pages/login", fiber.Map{
-		"title": "Login",
-		"error": c.Query("error"),
-	}, "layouts/base")
-}
-
 // LoginCredentials represents the login form data
 type LoginCredentials struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-}
-
-// loginResponse represents the expected return from a login query
-type aLoginResponse struct {
-	ID         int         `json:"id"`
-	CreatedAt  time.Time   `json:"created_at"`
-	Name       string      `json:"name"`
-	Initials   string      `json:"initials"`
-	Email      string      `json:"email"`
-	Password   string      `json:"password"`
-	FacilityID int         `json:"facility_id"`
-	Role       models.Role `json:"role"`
-	Code       string      `json:"code"`
 }
 
 // SessionData represents the data stored in a session
@@ -74,8 +43,14 @@ type SessionData struct {
 	Name       string `json:"name"`
 }
 
+// Session represents a user session
+type Session struct {
+	ID        string    `json:"id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 // handleLogin processes the login form
-func (h *LoginHandler) handleLogin(c *fiber.Ctx) error {
+func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 	// Check form data
 	var creds LoginCredentials
 	if err := c.BodyParser(&creds); err != nil {
@@ -91,25 +66,8 @@ func (h *LoginHandler) handleLogin(c *fiber.Ctx) error {
 		Str("email", creds.Email).
 		Msg("Executing SQL query")
 
-		// Check database for user
-
-	var controller aLoginResponse
-	err := h.db.QueryRow(context.Background(),
-		`SELECT * 
-     FROM controllers c
-     JOIN facilities f ON c.facility_id = f.id
-     WHERE c.email = $1;`,
-		creds.Email).Scan(
-		&controller.ID,
-		&controller.CreatedAt,
-		&controller.Name,
-		&controller.Initials,
-		&controller.Email,
-		&controller.Password,
-		&controller.FacilityID,
-		&controller.Role,
-		&controller.Code,
-	)
+	// Check database for user
+	controller, err := db.GetLoginResponse(h.db, creds.Email)
 	if err != nil {
 		h.logger.Warn().
 			Err(err).
@@ -152,12 +110,12 @@ func (h *LoginHandler) handleLogin(c *fiber.Ctx) error {
 }
 
 // HandleLogout processes logout requests
-func (h *LoginHandler) HandleLogout(c *fiber.Ctx) error {
+func (h *AuthHandler) HandleLogout(c *fiber.Ctx) error {
 	return h.auth.Logout(c)
 }
 
 // getRedirectURL returns the appropriate redirect URL based on role
-func (h *LoginHandler) getRedirectURL(role string, facility string) string {
+func (h *AuthHandler) getRedirectURL(role string, facility string) string {
 	switch role {
 	case "super":
 		return "/app/super/dashboard"
@@ -168,8 +126,10 @@ func (h *LoginHandler) getRedirectURL(role string, facility string) string {
 	}
 }
 
-// Session represents a user session
-type Session struct {
-	ID        string    `json:"id"`
-	ExpiresAt time.Time `json:"expires_at"`
+// LoginForm displays the login page
+func (h *AuthHandler) LoginForm(c *fiber.Ctx) error {
+	return c.Render("pages/login", fiber.Map{
+		"title": "Login",
+		"error": c.Query("error"),
+	}, "layouts/base")
 }
