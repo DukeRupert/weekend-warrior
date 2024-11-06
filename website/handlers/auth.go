@@ -133,3 +133,11 @@ func (h *AuthHandler) LoginForm(c *fiber.Ctx) error {
 		"error": c.Query("error"),
 	}, "layouts/base")
 }
+
+// LogoutForm displays the login page
+func (h *AuthHandler) LogoutForm(c *fiber.Ctx) error {
+	return c.Render("pages/logout", fiber.Map{
+		"title": "Logout",
+		"error": c.Query("error"),
+	}, "layouts/base")
+}

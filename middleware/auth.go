@@ -142,9 +142,9 @@ func (am *AuthMiddleware) Login(c *fiber.Ctx, userID int, facilityID int, role m
 	case "super":
 		return c.Redirect("/super/dashboard")
 	case "admin":
-		return c.Redirect(fmt.Sprintf("/app/%d/admin/dashboard", user.FacilityID))
+		return c.Redirect(fmt.Sprintf("/admin/dashboard", user.FacilityID))
 	default:
-		return c.Redirect(fmt.Sprintf("/app/%d/dashboard", user.FacilityID))
+		return c.Redirect(fmt.Sprintf("/dashboard", user.FacilityID))
 	}
 }
 
@@ -229,6 +229,47 @@ func (am *AuthMiddleware) AdminOnly() fiber.Handler {
 
 			return c.Next()
 
+		}
+
+		reqLogger.Warn().
+			Interface("user_id", userID).
+			Msg("Non-admin user attempted to access admin route")
+
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Admin access required",
+		})
+	}
+}
+
+// AdminOnly middleware checks if the user is an admin with logging
+func (am *AuthMiddleware) SuperOnly() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		reqLogger := am.logger.With().
+			Str("path", c.Path()).
+			Str("method", c.Method()).
+			Str("ip", c.IP()).
+			Str("request_id", c.Get("X-Request-ID")).
+			Logger()
+
+		sess, err := am.Store.Get(c)
+		if err != nil {
+			reqLogger.Error().
+				Err(err).
+				Msg("Failed to get session in admin check")
+
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid session",
+			})
+		}
+
+		userID := sess.Get("user_id")
+		role := sess.Get("role")
+
+		if role == "super" {
+			reqLogger.Info().
+				Interface("user_id", userID).
+				Msg("Admin route accessed")
+			return c.Next()
 		}
 
 		reqLogger.Warn().

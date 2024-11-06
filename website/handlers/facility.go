@@ -72,9 +72,11 @@ func (h *FacilityHandler) GetFacilities(c *fiber.Ctx) error {
 		Int("facility_count", len(facilities)).
 		Msg("facilities retrieved successfully")
 
-	return c.JSON(fiber.Map{
-		"data": facilities,
-	})
+	return c.Render("pages/super/facilities", fiber.Map{
+		"title": "Facilities",
+		"error": c.Query("error"),
+		"facilities": facilities,
+	}, "layouts/base", "layouts/app")
 }
 
 // CreateFacility handles POST requests to create a new facility
@@ -176,7 +178,7 @@ func (h *FacilityHandler) CreateFacility(c *fiber.Ctx) error {
 		Msg("facility created successfully")
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"data": facility,
+		"message": "Success",
 	})
 }
 
@@ -241,9 +243,10 @@ func (h *FacilityHandler) DeleteFacility(c *fiber.Ctx) error {
 
 // CreateForm renders the facility creation form
 func (h *FacilityHandler) CreateForm(c *fiber.Ctx) error {
-	return c.Render("facilities/create", fiber.Map{
-		"Title": "Create New Facility",
-	})
+	return c.Render("pages/super/createFacility", fiber.Map{
+		"title": "Create New Facility",
+		"error": c.Query("error"),
+	}, "layouts/app", "layouts/base")
 }
 
 // GetFacilityControllers returns all controllers for a facility code

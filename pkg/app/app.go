@@ -101,7 +101,16 @@ func (a *App) setupHandlers() {
 	})
 	a.Fiber.Get("/login", authHandler.LoginForm)
 	a.Fiber.Post("/login", authHandler.HandleLogin)
-	a.Fiber.Post("/logout", authHandler.HandleLogout)
+	a.Fiber.Get("/logout", authHandler.LogoutForm)
+	a.Fiber.Post("/logout", a.Auth.Logout)
+
+	super := a.Fiber.Group("/super", a.Auth.Protected(), a.Auth.SuperOnly())
+	super.Get("/dashboard", func(c *fiber.Ctx) error {
+		return c.SendString("Hello, World! 👋. You must be an super.")
+	})
+	super.Get("/facilities", facilityHandler.GetFacilities)
+	super.Post("/facilities", facilityHandler.CreateFacility)
+	super.Get("/facilities/create", facilityHandler.CreateForm)
 
 	admin := a.Fiber.Group("/admin", a.Auth.Protected(), a.Auth.AdminOnly())
 	admin.Get("/", func(c *fiber.Ctx) error {
