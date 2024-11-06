@@ -34,4 +34,6 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@localhost:6543/postgres
 ### Note
 Make sure your `.env` file contains all necessary database connection details required by your migration configuration.
 
+Nonce: $2a$10$R40Petx4mfIZQHen70VoleqZ6B.IxtKewvW1eS.WgXYQmiS/tWTeG
+
 Would you like me to add any additional sections like troubleshooting or common environment variables?

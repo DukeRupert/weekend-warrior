@@ -103,6 +103,8 @@ func (a *App) setupHandlers() {
 	a.Fiber.Post("/login", authHandler.HandleLogin)
 	a.Fiber.Get("/logout", authHandler.LogoutForm)
 	a.Fiber.Post("/logout", a.Auth.Logout)
+	a.Fiber.Get("/register", authHandler.RegisterForm)
+	a.Fiber.Post("/register", userHandler.Create)
 
 	super := a.Fiber.Group("/super", a.Auth.Protected(), a.Auth.SuperOnly())
 	super.Get("/dashboard", func(c *fiber.Ctx) error {

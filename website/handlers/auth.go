@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/middleware"
@@ -15,17 +14,17 @@ import (
 
 // AuthHandler handles user authentication
 type AuthHandler struct {
-	db     *db.Service
-	auth   *middleware.AuthMiddleware
-	logger zerolog.Logger
+	Db     *db.Service
+	Auth   *middleware.AuthMiddleware
+	Logger zerolog.Logger
 }
 
 // NewAuthHandler creates a new login handler
 func NewAuthHandler(db *db.Service, auth *middleware.AuthMiddleware) *AuthHandler {
 	return &AuthHandler{
-		db:     db,
-		auth:   auth,
-		logger: log.With().Str("handler", "login").Logger(),
+		Db:     db,
+		Auth:   auth,
+		Logger: log.With().Str("handler", "login").Logger(),
 	}
 }
 
@@ -33,20 +32,6 @@ func NewAuthHandler(db *db.Service, auth *middleware.AuthMiddleware) *AuthHandle
 type LoginCredentials struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-}
-
-// SessionData represents the data stored in a session
-type SessionData struct {
-	UserID     int    `json:"user_id"`
-	FacilityID int    `json:"facility_id"`
-	Role       string `json:"role"`
-	Name       string `json:"name"`
-}
-
-// Session represents a user session
-type Session struct {
-	ID        string    `json:"id"`
-	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // handleLogin processes the login form
@@ -59,7 +44,7 @@ func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 		})
 	}
 
-	h.logger.Debug().
+	h.Logger.Debug().
 		Str("query", `SELECT id, facility_id, role, password, name 
     FROM controllers 
     WHERE email = $1`).
@@ -67,9 +52,9 @@ func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 		Msg("Executing SQL query")
 
 	// Check database for user
-	controller, err := db.GetLoginResponse(h.db, creds.Email)
+	controller, err := db.GetLoginResponse(h.Db, creds.Email)
 	if err != nil {
-		h.logger.Warn().
+		h.Logger.Warn().
 			Err(err).
 			Str("email", creds.Email).
 			Msg("Login attempt failed: user not found")
@@ -78,7 +63,7 @@ func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 
 	// Verify password using bcrypt
 	if err := bcrypt.CompareHashAndPassword([]byte(controller.Password), []byte(creds.Password)); err != nil {
-		h.logger.Warn().
+		h.Logger.Warn().
 			Str("email", creds.Email).
 			Msg("Login attempt failed: invalid password")
 
@@ -86,8 +71,8 @@ func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 	}
 
 	// Use the auth middleware to create new session
-	if err := h.auth.Login(c, controller.ID, controller.FacilityID, controller.Role); err != nil {
-		h.logger.Error().
+	if err := h.Auth.Login(c, controller.ID, controller.FacilityID, controller.Role); err != nil {
+		h.Logger.Error().
 			Err(err).
 			Str("email", creds.Email).
 			Int("userID", controller.ID).
@@ -98,7 +83,7 @@ func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 		return c.Redirect("/login?error=Server+error", fiber.StatusFound)
 	}
 
-	h.logger.Info().
+	h.Logger.Info().
 		Str("email", creds.Email).
 		Int("userID", controller.ID).
 		Str("role", controller.Role.String()).
@@ -111,18 +96,18 @@ func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 
 // HandleLogout processes logout requests
 func (h *AuthHandler) HandleLogout(c *fiber.Ctx) error {
-	return h.auth.Logout(c)
+	return h.Auth.Logout(c)
 }
 
 // getRedirectURL returns the appropriate redirect URL based on role
 func (h *AuthHandler) getRedirectURL(role string, facility string) string {
 	switch role {
 	case "super":
-		return "/app/super/dashboard"
+		return "/super/dashboard"
 	case "admin":
-		return fmt.Sprintf("/app/%s/admin/dashboard", facility)
+		return fmt.Sprintf("/%s/admin/calendar", facility)
 	default:
-		return fmt.Sprintf("/app/%s/dashboard", facility)
+		return fmt.Sprintf("/%s/calendar", facility)
 	}
 }
 
@@ -139,5 +124,38 @@ func (h *AuthHandler) LogoutForm(c *fiber.Ctx) error {
 	return c.Render("pages/logout", fiber.Map{
 		"title": "Logout",
 		"error": c.Query("error"),
+	}, "layouts/base")
+}
+
+// RegisterForm displays the register page
+func (h *AuthHandler) RegisterForm(c *fiber.Ctx) error {
+	// Create request-specific logger
+	reqLogger := h.Logger.With().
+		Str("method", "RegisterForm").
+		Str("request_id", c.GetRespHeader("X-Request-ID")).
+		Logger()
+
+	reqLogger.Info().Msg("retrieving facilities list")
+
+	facilities, err := h.Db.ListFacilities(c.Context())
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to retrieve facilities")
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to retrieve facilities",
+			"detail": err.Error(),
+		})
+	}
+
+	reqLogger.Info().
+		Int("facility_count", len(facilities)).
+		Msg("facilities retrieved successfully")
+	
+	return c.Render("pages/register", fiber.Map{
+		"title": "Register",
+		"error": c.Query("error"),
+		"facilities": facilities,
 	}, "layouts/base")
 }

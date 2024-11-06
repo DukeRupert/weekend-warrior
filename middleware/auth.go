@@ -297,5 +297,5 @@ func (am *AuthMiddleware) Logout(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.Redirect("/auth/login")
+	return c.Redirect("/login")
 }
