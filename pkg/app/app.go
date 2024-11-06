@@ -108,10 +108,11 @@ func (a *App) setupHandlers() {
 	super.Get("/dashboard", func(c *fiber.Ctx) error {
 		return c.SendString("Hello, World! 👋. You must be an super.")
 	})
-	super.Get("/facilities", facilityHandler.GetFacilities)
-	super.Post("/facilities", facilityHandler.CreateFacility)
+	super.Get("/facilities", facilityHandler.GetAll)
+	super.Post("/facilities", facilityHandler.Create)
+	super.Put("/facilities/:id", facilityHandler.Update)
 	super.Get("/facilities/create", facilityHandler.CreateForm)
-	super.Get("/facilities/:id/edit", facilityHandler.EditForm)
+	super.Get("/facilities/:id/edit", facilityHandler.UpdateForm)
 
 	admin := a.Fiber.Group("/admin", a.Auth.Protected(), a.Auth.AdminOnly())
 	admin.Get("/", func(c *fiber.Ctx) error {
@@ -145,10 +146,10 @@ func (a *App) setupHandlers() {
 	// app.Post("/schedule", ToggleAvailability)
 
 	facilities := app.Group("/facilities")
-	facilities.Get("/", facilityHandler.GetFacilities)
+	facilities.Get("/", facilityHandler.GetAll)
 	facilities.Get("/create", facilityHandler.CreateForm)
-	facilities.Post("/create", facilityHandler.CreateFacility)
-	facilities.Delete("/:code", facilityHandler.DeleteFacility)
+	facilities.Post("/create", facilityHandler.Create)
+	facilities.Delete("/:code", facilityHandler.Delete)
 	facilities.Put("/:code", func(c *fiber.Ctx) error {
 		return c.SendString("Update facility endpoint stub.")
 	})

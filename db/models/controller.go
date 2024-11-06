@@ -20,6 +20,7 @@ func (r Role) String() string {
 type Controller struct {
 	ID         int       `json:"id"`
 	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 	Name       string    `json:"name"`
 	Initials   string    `json:"initials"`
 	Email      string    `json:"email"`

@@ -46,8 +46,8 @@ func (h *FacilityHandler) GetUserFacility(c *fiber.Ctx) error {
 	})
 }
 
-// GetFacilities handles GET requests to list all facilities
-func (h *FacilityHandler) GetFacilities(c *fiber.Ctx) error {
+// GetAll handles GET requests to list all facilities
+func (h *FacilityHandler) GetAll(c *fiber.Ctx) error {
 	// Create request-specific logger
 	reqLogger := h.logger.With().
 		Str("method", "ListFacilities").
@@ -72,80 +72,15 @@ func (h *FacilityHandler) GetFacilities(c *fiber.Ctx) error {
 		Int("facility_count", len(facilities)).
 		Msg("facilities retrieved successfully")
 
-	return c.Render("pages/super/facilities", fiber.Map{
+	return c.Render("pages/super/facilities/page", fiber.Map{
 		"title":      "Facilities",
 		"error":      c.Query("error"),
 		"facilities": facilities,
 	}, "layouts/base", "layouts/app")
 }
 
-// EditFacility returns form to edit a facility
-func (h *FacilityHandler) EditForm(c *fiber.Ctx) error {
-	// Create request-specific logger
-	reqLogger := h.logger.With().
-		Str("method", "EditFacility").
-		Str("request_id", c.GetRespHeader("X-Request-ID")).
-		Logger()
-
-		// Get id parameter as string
-	idStr := c.Params("id")
-	if idStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Missing id parameter",
-		})
-	}
-
-	// Convert to int
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		log.Error().
-			Err(err).
-			Str("id_param", idStr).
-			Msg("Invalid id parameter format")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid id format",
-		})
-	}
-
-	// Optional: Check if id is positive
-	if id <= 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid id value",
-		})
-	}
-
-	log.Debug().
-		Int("id", id).
-		Msg("Successfully parsed facility ID")
-
-	reqLogger.Info().Msg("retrieving facility")
-
-	facility, err := h.dbService.GetFacilityByID(c.Context(), id)
-	if err != nil {
-		reqLogger.Error().
-			Err(err).
-			Msg("failed to retrieve facility")
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to retrieve facility",
-			"detail": err.Error(),
-		})
-	}
-
-	reqLogger.Info().
-		Str("facility code", facility.Code).
-		Msg("facility retrieved successfully")
-
-	return c.Render("pages/super/editForm", fiber.Map{
-		"ID":        facility.Name,
-		"Name":      facility.Name,
-		"CreatedAt": facility.CreatedAt,
-		"Code":      facility.Code,
-	})
-}
-
-// CreateFacility handles POST requests to create a new facility
-func (h *FacilityHandler) CreateFacility(c *fiber.Ctx) error {
+// Create handles POST requests to create a new facility
+func (h *FacilityHandler) Create(c *fiber.Ctx) error {
 	// Create request-specific logger
 	reqLogger := h.logger.With().
 		Str("method", "CreateFacility").
@@ -247,8 +182,146 @@ func (h *FacilityHandler) CreateFacility(c *fiber.Ctx) error {
 	})
 }
 
-// DeleteFacility handles DELETE requests to delete a facility
-func (h *FacilityHandler) DeleteFacility(c *fiber.Ctx) error {
+// UpdateFacility handles POST requests to create a new facility
+func (h *FacilityHandler) Update(c *fiber.Ctx) error {
+	// Create request-specific logger
+	reqLogger := h.logger.With().
+		Str("method", "Update Facility").
+		Str("request_id", c.GetRespHeader("X-Request-ID")).
+		Logger()
+
+	reqLogger.Info().Msg("processing update facility request")
+
+	// Get id parameter as string
+	idStr := c.Params("id")
+	if idStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Missing id parameter",
+		})
+	}
+
+	// Convert to int
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("id_param", idStr).
+			Msg("Invalid id parameter format")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid id format",
+		})
+	}
+
+	// Optional: Check if id is positive
+	if id <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid id value",
+		})
+	}
+
+	log.Debug().
+		Int("id", id).
+		Msg("Successfully parsed facility ID")
+
+	var req models.UpdateFacilityParams
+	if err := c.BodyParser(&req); err != nil {
+		reqLogger.Error().
+			Err(err).
+			Str("body", string(c.Body())).
+			Msg("failed to parse request body")
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request body",
+			"detail": err.Error(),
+		})
+	}
+
+	// Validation logging
+	if req.Name == "" {
+		reqLogger.Error().
+			Interface("request", req).
+			Msg("validation failed: name is required")
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request",
+			"detail": "name is required",
+		})
+	}
+
+	if req.Code == "" {
+		reqLogger.Error().
+			Interface("request", req).
+			Msg("validation failed: code is required")
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request",
+			"detail": "code is required",
+		})
+	}
+
+	if len(req.Code) != 4 {
+		reqLogger.Error().
+			Str("code", req.Code).
+			Interface("request", req).
+			Msg("validation failed: invalid code length")
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request",
+			"detail": "code must be exactly 4 characters",
+		})
+	}
+
+	reqLogger.Debug().
+		Str("name", req.Name).
+		Str("code", req.Code).
+		Msg("attempting to update facility")
+
+	facility, err := h.dbService.UpdateFacility(c.Context(), models.UpdateFacilityParams{
+		ID: id,
+		Name: req.Name,
+		Code: req.Code,
+	})
+	if err != nil {
+		if isDuplicateKeyError(err) {
+			reqLogger.Warn().
+				Str("code", req.Code).
+				Str("name", req.Name).
+				Msg("duplicate facility code detected")
+
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error":  "Facility code already exists",
+				"detail": fmt.Sprintf("code %s is already in use", req.Code),
+			})
+		}
+
+		reqLogger.Error().
+			Err(err).
+			Str("name", req.Name).
+			Str("code", req.Code).
+			Msg("failed to create facility")
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to create facility",
+			"detail": err.Error(),
+		})
+	}
+
+	reqLogger.Info().
+		Int("facility_id", facility.ID).
+		Str("name", facility.Name).
+		Str("code", facility.Code).
+		Msg("facility created successfully")
+
+	return c.Status(fiber.StatusOK).Render("pages/super/facilities/listItem", fiber.Map{
+		"ID":        facility.Name,
+		"Name":      facility.Name,
+		"CreatedAt": facility.CreatedAt,
+		"Code":      facility.Code,
+	})
+}
+
+// Delete handles DELETE requests to delete a facility
+func (h *FacilityHandler) Delete(c *fiber.Ctx) error {
 	// Create request-specific logger
 	reqLogger := h.logger.With().
 		Str("method", "DeleteFacility").
@@ -312,6 +385,71 @@ func (h *FacilityHandler) CreateForm(c *fiber.Ctx) error {
 		"title": "Create New Facility",
 		"error": c.Query("error"),
 	}, "layouts/app", "layouts/base")
+}
+
+// UpdateForm returns form to edit a facility
+func (h *FacilityHandler) UpdateForm(c *fiber.Ctx) error {
+	// Create request-specific logger
+	reqLogger := h.logger.With().
+		Str("method", "EditFacility").
+		Str("request_id", c.GetRespHeader("X-Request-ID")).
+		Logger()
+
+	// Get id parameter as string
+	idStr := c.Params("id")
+	if idStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Missing id parameter",
+		})
+	}
+
+	// Convert to int
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("id_param", idStr).
+			Msg("Invalid id parameter format")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid id format",
+		})
+	}
+
+	// Optional: Check if id is positive
+	if id <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid id value",
+		})
+	}
+
+	log.Debug().
+		Int("id", id).
+		Msg("Successfully parsed facility ID")
+
+	reqLogger.Info().Msg("retrieving facility")
+
+	facility, err := h.dbService.GetFacilityByID(c.Context(), id)
+	if err != nil {
+		reqLogger.Error().
+			Err(err).
+			Msg("failed to retrieve facility")
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to retrieve facility",
+			"detail": err.Error(),
+		})
+	}
+
+	reqLogger.Info().
+		Str("facility code", facility.Code).
+		Msg("facility retrieved successfully")
+
+	return c.Render("pages/super/facilities/updateForm", fiber.Map{
+		"ID":        facility.ID,
+		"Name":      facility.Name,
+		"CreatedAt": facility.CreatedAt,
+		"Code":      facility.Code,
+	})
 }
 
 // GetFacilityControllers returns all controllers for a facility code

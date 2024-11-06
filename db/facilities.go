@@ -3,9 +3,10 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
-
 	"github.com/dukerupert/weekend-warrior/db/models"
+	"github.com/jackc/pgx/v5"
 )
 
 // CreateFacility creates a new facility in the database
@@ -24,6 +25,34 @@ func (s *Service) CreateFacility(ctx context.Context, params models.CreateFacili
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error creating facility: %w", err)
+	}
+
+	return &facility, nil
+}
+
+// CreateFacility creates a new facility in the database
+func (s *Service) UpdateFacility(ctx context.Context, params models.UpdateFacilityParams) (*models.Facility, error) {
+	var facility models.Facility
+
+	err := s.pool.QueryRow(ctx, `
+        UPDATE facilities 
+        SET name = $1, 
+            code = $2,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING id, created_at, updated_at, name, code
+    `, params.Name, params.Code, params.ID).Scan(
+		&facility.ID,
+		&facility.CreatedAt,
+		&facility.UpdatedAt,
+		&facility.Name,
+		&facility.Code,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("facility not found with id %d: %w", params.ID, err)
+		}
+		return nil, fmt.Errorf("error updating facility: %w", err)
 	}
 
 	return &facility, nil
