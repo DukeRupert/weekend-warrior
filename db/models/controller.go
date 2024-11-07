@@ -21,7 +21,8 @@ type Controller struct {
 	ID         int       `json:"id"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
-	Name       string    `json:"name"`
+	FirstName  string    `json:"first_name"`
+	LastName   string    `json:"last_name"`
 	Initials   string    `json:"initials"`
 	Email      string    `json:"email"`
 	Password   string    `json:"-"` // Hashed password
@@ -31,7 +32,8 @@ type Controller struct {
 
 // CreateControllerParams holds the parameters needed to create a new controller
 type CreateControllerParams struct {
-	Name       string `json:"name"`
+	FirstName  string `json:"first_name"`
+	LastName   string `json:"last_name"`
 	Initials   string `json:"initials"`
 	Email      string `json:"email"`
 	Password   string `json:"password"`

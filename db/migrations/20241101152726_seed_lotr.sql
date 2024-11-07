@@ -9,35 +9,37 @@ INSERT INTO facilities (name, code) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- Then seed controllers (using facilities' IDs)
-INSERT INTO controllers (name, initials, email, password, facility_id, role) VALUES
+INSERT INTO controllers (first_name, last_name, initials, email, password, facility_id, role) VALUES
     -- Rivendell Staff
-    ('Elrond Peredhel', 'EP', 'elrond@rivendell.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq', 
+    ('Logan', 'Williams', 'LW', 'logan@fireflysoftware.dev', '$2a$10$R40Petx4mfIZQHen70VoleqZ6B.IxtKewvW1eS.WgXYQmiS/tWTeG',
         (SELECT id FROM facilities WHERE code = 'RVDL'), 'super'),
-    ('Arwen Evenstar', 'AE', 'arwen@rivendell.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Elrond', 'Peredhel', 'EP', 'elrond@rivendell.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq', 
         (SELECT id FROM facilities WHERE code = 'RVDL'), 'admin'),
+    ('Arwen', 'Evenstar', 'AE', 'arwen@rivendell.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+        (SELECT id FROM facilities WHERE code = 'RVDL'), 'user'),
 
     -- Minas Tirith Staff
-    ('Aragorn Elessar', 'AE', 'aragorn@minas-tirith.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Aragorn', 'Elessar', 'AE', 'aragorn@minas-tirith.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'MTGH'), 'super'),
-    ('Faramir Steward', 'FS', 'faramir@minas-tirith.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Faramir', 'Steward', 'FS', 'faramir@minas-tirith.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'MTGH'), 'user'),
 
     -- Lothlorien Staff
-    ('Galadriel Light', 'GL', 'galadriel@lothlorien.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Galadriel', 'Light', 'GL', 'galadriel@lothlorien.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'LOTH'), 'admin'),
-    ('Celeborn Elder', 'CE', 'celeborn@lothlorien.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Celeborn', 'Elder', 'CE', 'celeborn@lothlorien.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'LOTH'), 'user'),
 
     -- Erebor Staff
-    ('Thorin Oakenshield', 'TO', 'thorin@erebor.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Thorin', 'Oakenshield', 'TO', 'thorin@erebor.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'ERBR'), 'super'),
-    ('Balin Fundin', 'BF', 'balin@erebor.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Balin', 'Fundin', 'BF', 'balin@erebor.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'ERBR'), 'user'),
 
     -- Shire Staff
-    ('Bilbo Baggins', 'BB', 'bilbo@shire.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Bilbo', 'Baggins', 'BB', 'bilbo@shire.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'SHIR'), 'admin'),
-    ('Frodo Baggins', 'FB', 'frodo@shire.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
+    ('Frodo', 'Baggins', 'FB', 'frodo@shire.med', '$2a$10$xVQk0kTlMoTvQEIKN7kzPO2aHnwAWXz9SJ9nz0x1XR4b8r2j5n5Yq',
         (SELECT id FROM facilities WHERE code = 'SHIR'), 'user')
 ON CONFLICT (email) DO NOTHING;
 
