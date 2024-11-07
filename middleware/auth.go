@@ -2,7 +2,6 @@
 package middleware
 
 import (
-	"fmt"
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/db/models"
 	"github.com/gofiber/fiber/v2"
@@ -18,8 +17,8 @@ import (
 type AuthMiddleware struct {
 	Db      *db.Service
 	Store   *session.Store
-	options SessionOptions
-	logger  zerolog.Logger
+	Options SessionOptions
+	Logger  zerolog.Logger
 }
 
 // SessionOptions contains configuration for the session middleware
@@ -62,8 +61,8 @@ func NewAuthMiddleware(db *db.Service, options SessionOptions) (*AuthMiddleware,
 	return &AuthMiddleware{
 		Db:      db,
 		Store:   store,
-		options: options,
-		logger:  logger,
+		Options: options,
+		Logger:  logger,
 	}, nil
 }
 
@@ -137,15 +136,7 @@ func (am *AuthMiddleware) Login(c *fiber.Ctx, userID int, facilityID int, role m
 		return err
 	}
 
-	// Redirect based on role
-	switch user.Role {
-	case "super":
-		return c.Redirect("/super/dashboard")
-	case "admin":
-		return c.Redirect(fmt.Sprintf("/admin/dashboard", user.FacilityID))
-	default:
-		return c.Redirect(fmt.Sprintf("/dashboard", user.FacilityID))
-	}
+	return c.Next()	
 }
 
 // Protected middleware checks if the request has a valid session
@@ -201,7 +192,7 @@ func (am *AuthMiddleware) Protected() fiber.Handler {
 // AdminOnly middleware checks if the user is an admin with logging
 func (am *AuthMiddleware) AdminOnly() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		reqLogger := am.logger.With().
+		reqLogger := am.Logger.With().
 			Str("path", c.Path()).
 			Str("method", c.Method()).
 			Str("ip", c.IP()).
@@ -244,7 +235,7 @@ func (am *AuthMiddleware) AdminOnly() fiber.Handler {
 // AdminOnly middleware checks if the user is an admin with logging
 func (am *AuthMiddleware) SuperOnly() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		reqLogger := am.logger.With().
+		reqLogger := am.Logger.With().
 			Str("path", c.Path()).
 			Str("method", c.Method()).
 			Str("ip", c.IP()).

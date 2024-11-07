@@ -3,11 +3,11 @@
 package handlers
 
 import (
-	"fmt"
-	"strings"
-	"strconv"
 	"context"
+	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/dukerupert/weekend-warrior/db"
 	"github.com/dukerupert/weekend-warrior/db/models"
@@ -18,14 +18,14 @@ import (
 )
 
 type UserHandler struct {
-	Db *db.Service
-	Logger    zerolog.Logger
+	Db     *db.Service
+	Logger zerolog.Logger
 }
 
 func NewUserHandler(db *db.Service) *UserHandler {
 	return &UserHandler{
-		Db: db,
-		Logger:    log.With().Str("handler", "user").Logger(),
+		Db:     db,
+		Logger: log.With().Str("handler", "user").Logger(),
 	}
 }
 
@@ -372,16 +372,35 @@ func (h *UserHandler) Delete(c *fiber.Ctx) error {
 }
 
 // ListControllers handles GET requests to list all controllers
-func (h *UserHandler) List(c *fiber.Ctx) error {
+func (h *UserHandler) GetAll(c *fiber.Ctx) error {
 	// Create request-specific logger
 	reqLogger := h.Logger.With().
-		Str("method", "ListControllers").
+		Str("method", "GetAll").
 		Str("request_id", c.GetRespHeader("X-Request-ID")).
 		Logger()
 
 	reqLogger.Info().Msg("retrieving controllers list")
 
-	controllers, err := h.Db.ListControllers(c.Context())
+	// Get code parameter as string
+	code := c.Params("code")
+	if code == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Missing facility code parameter",
+		})
+	}
+
+	if len(code) != 4 {
+		reqLogger.Error().Msg("code must be exactly 4 characters long")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid id value",
+		})
+	}
+
+	log.Debug().
+		Str("code", code).
+		Msg("Successfully parsed facility code")
+
+	controllers, err := h.Db.GetControllersByFacilityCode(c.Context(), code)
 	if err != nil {
 		reqLogger.Error().
 			Err(err).
@@ -397,26 +416,19 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 		Int("controller_count", len(controllers)).
 		Msg("controllers retrieved successfully")
 
-	return c.JSON(fiber.Map{
-		"data": controllers,
-	})
+	return c.Render("pages/admin/controllers/page", fiber.Map{
+		"title":       "Controllers",
+		"code":        code,
+		"error":       c.Query("error"),
+		"controllers": controllers,
+	}, "layouts/base", "layouts/app")
 }
 
 // CreateForm displays the registration page
 func (h *UserHandler) CreateForm(c *fiber.Ctx) error {
-	// Fetch facilities for the dropdown
-	facilities, err := h.Db.ListFacilities(context.Background())
-	if err != nil {
-		h.Logger.Error().Err(err).Msg("Failed to fetch facilities")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Server error",
-		})
-	}
-
-	return c.Render("register", fiber.Map{
-		"title":      "Register",
-		"error":      c.Query("error"),
-		"facilities": facilities,
+	return c.Render("pages/admin/controllers/createForm", fiber.Map{
+		"Name": "Lothlorien TRACON",
+		"Code": "LOTH",
 	})
 }
 

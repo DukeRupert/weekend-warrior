@@ -120,34 +120,46 @@ func (s *Service) GetControllerByEmail(ctx context.Context, email string) (*mode
 	return &controller, nil
 }
 
-// GetControllersByFacility retrieves all controllers for a facility
-func (s *Service) GetControllersByFacility(ctx context.Context, facilityID int) ([]models.Controller, error) {
+// GetControllersByFacilityCode retrieves all controllers for a facility
+func (s *Service) GetControllersByFacilityCode(ctx context.Context, facilityCode string) ([]models.Controller, error) {
 	rows, err := s.pool.Query(ctx, `
-        SELECT id, created_at, name, initials, email, facility_id
-        FROM controllers
-        WHERE facility_id = $1
-        ORDER BY name ASC
-    `, facilityID)
+	SELECT 
+		c.id,
+		c.created_at,
+		c.updated_at,
+		c.name,
+		c.initials,
+		c.email,
+		c.role,
+		c.facility_id
+	FROM 
+		controllers c
+		INNER JOIN facilities f ON c.facility_id = f.id
+	WHERE 
+		f.code = $1
+    `, facilityCode)
 	if err != nil {
-		return nil, fmt.Errorf("error listing controllers: %w", err)
+		return nil, fmt.Errorf("error listing controllers at %s: %w",facilityCode, err)
 	}
 	defer rows.Close()
 
 	var controllers []models.Controller
 	for rows.Next() {
-		var controller models.Controller
+		var c models.Controller
 		err := rows.Scan(
-			&controller.ID,
-			&controller.CreatedAt,
-			&controller.Name,
-			&controller.Initials,
-			&controller.Email,
-			&controller.FacilityID,
+			&c.ID,
+            &c.CreatedAt,
+            &c.UpdatedAt,
+            &c.Name,
+            &c.Initials,
+            &c.Email,
+            &c.Role,
+			&c.FacilityID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning controller row: %w", err)
 		}
-		controllers = append(controllers, controller)
+		controllers = append(controllers, c)
 	}
 
 	if err := rows.Err(); err != nil {

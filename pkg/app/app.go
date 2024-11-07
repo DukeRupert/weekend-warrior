@@ -116,23 +116,23 @@ func (a *App) setupHandlers() {
 	super.Get("/facilities/create", facilityHandler.CreateForm)
 	super.Get("/facilities/:id/edit", facilityHandler.UpdateForm)
 
-	admin := a.Fiber.Group("/admin", a.Auth.Protected(), a.Auth.AdminOnly())
+	admin := a.Fiber.Group(":code/admin", a.Auth.Protected(), a.Auth.AdminOnly())
 	admin.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Hello, World! 👋. You must be an admin.")
 	})
-
-	controllers := admin.Group("/controllers")
+	admin.Get("/controllers", userHandler.GetAll)
+	admin.Post("/controllers", userHandler.Create)
+	admin.Get("/controllers/create", userHandler.CreateForm)
+	//controllers := admin.Group("/controllers")
 	// List all controllers
-	controllers.Get("/", userHandler.List)
-	controllers.Post("/", userHandler.Create)
-	controllers.Put("/:id", userHandler.Update)
-	controllers.Delete("/:id", userHandler.Delete)
+	//controllers.Put("/:id", userHandler.Update)
+	//controllers.Delete("/:id", userHandler.Delete)
 	// Create new controller
-	controllers.Get("/new", userHandler.CreateForm)
+	//controllers.Get("/new", userHandler.CreateForm)
 	// Update existing controller
-	controllers.Get("/edit/:id", userHandler.UpdateForm)
+	//controllers.Get("/edit/:id", userHandler.UpdateForm)
 	// Assign schedule to controller
-	controllers.Get("/schedule/:id", userHandler.ScheduleForm)
+	//controllers.Get("/schedule/:id", userHandler.ScheduleForm)
 
 	// Protected
 	app := a.Fiber.Group("/app", a.Auth.Protected())
@@ -142,19 +142,19 @@ func (a *App) setupHandlers() {
 
 	// Controller Routes (Protected)
 	// View own facility info
-	app.Get("/facility", facilityHandler.GetUserFacility)
+	// app.Get("/facility", facilityHandler.GetUserFacility)
 	// Schedule viewing
 	// app.Get("/schedule", GetUserSchedule)
 	// app.Post("/schedule", ToggleAvailability)
 
-	facilities := app.Group("/facilities")
-	facilities.Get("/", facilityHandler.GetAll)
-	facilities.Get("/create", facilityHandler.CreateForm)
-	facilities.Post("/create", facilityHandler.Create)
-	facilities.Delete("/:code", facilityHandler.Delete)
-	facilities.Put("/:code", func(c *fiber.Ctx) error {
-		return c.SendString("Update facility endpoint stub.")
-	})
+	//facilities := app.Group("/facilities")
+	//facilities.Get("/", facilityHandler.GetAll)
+	//facilities.Get("/create", facilityHandler.CreateForm)
+	//facilities.Post("/create", facilityHandler.Create)
+	//facilities.Delete("/:code", facilityHandler.Delete)
+	// facilities.Put("/:code", func(c *fiber.Ctx) error {
+	// 	return c.SendString("Update facility endpoint stub.")
+	// })
 
 	// Setup root route
 	a.Fiber.Get("/calendarExample", calendarHandler.CalendarHandler)

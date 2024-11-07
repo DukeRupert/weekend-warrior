@@ -1,0 +1,15 @@
+<li hx-target="this" hx-swap="outerHTML" class="flex flex-col sm:flex-row justify-between gap-x-6 gap-y-4 py-5">
+    <div class="flex items-center min-w-0 gap-x-4">
+        <div class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-indigo-500 text-white text-sm font-medium">
+    {{.Initials}}
+</div>
+        <div class="min-w-0 flex-auto">
+            <p class="text-sm/6 font-semibold text-gray-900">{{.Name}}</p>
+            <p class="mt-1 truncate text-xs/5 text-gray-500">{{.Email}}</p>
+        </div>
+    </div>
+    <div class="flex gap-x-6 items-center items-end">
+        <button hx-get="/super/facilities/{{.ID}}/edit" class="text-indigo-600 hover:text-indigo-900">Edit<span
+                class="sr-only">{{.Name}}</span></a>
+    </div>
+</li>
